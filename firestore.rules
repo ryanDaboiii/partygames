@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Rooms: anyone (anonymous) can read/create; only host can update status
+    match /rooms/{roomCode} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null
+        && (
+          // Any authenticated user can add themselves to players
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['players'])
+          ||
+          // Only the host can update status/secretWord
+          resource.data.hostId == request.auth.uid
+        );
+
+      // Private role docs: each player can only read their own
+      match /roles/{playerId} {
+        allow read: if request.auth != null && request.auth.uid == playerId;
+        // Only the host (room.hostId) can write roles — enforced via Cloud Function
+        // For direct writes: restrict to the host
+        allow write: if request.auth != null
+          && get(/databases/$(database)/documents/rooms/$(roomCode)).data.hostId == request.auth.uid;
+      }
+
+      // Votes: each player can write their own; host can read all
+      match /votes/{voterId} {
+        allow create, update: if request.auth != null && request.auth.uid == voterId;
+        allow read: if request.auth != null
+          && (
+            request.auth.uid == voterId
+            || get(/databases/$(database)/documents/rooms/$(roomCode)).data.hostId == request.auth.uid
+          );
+      }
+    }
+  }
+}
