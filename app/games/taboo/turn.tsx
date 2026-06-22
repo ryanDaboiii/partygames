@@ -7,7 +7,7 @@ import {
   Pressable,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { palette, spacing, typography } from "../../../src/theme";
+import { palette, spacing, typography, scaleFont } from "../../../src/theme";
 import { useTabooStore, getCurrentCluegiver } from "../../../src/games/taboo/store";
 import { usePlayerStore } from "../../../src/store/players";
 import { MAX_PASSES_PER_TURN } from "../../../src/games/taboo/logic";
@@ -35,6 +35,7 @@ export default function TurnScreen() {
   const addPoints = usePlayerStore((s) => s.addPoints);
 
   const [timeLeft, setTimeLeft] = useState(roundTimeSecs);
+  const [isPaused, setIsPaused] = useState(false);
 
   const cluegiver = getCurrentCluegiver(players, totalTurnsPlayed);
   const card = deck[cardIndex % deck.length];
@@ -50,21 +51,18 @@ export default function TurnScreen() {
     if (phase === "setup") router.replace("/games/taboo");
   }, [phase]);
 
-  // Countdown timer
+  // Countdown timer — stops ticking while paused
   useEffect(() => {
+    if (isPaused) return;
     const interval = setInterval(() => {
       setTimeLeft((t) => (t <= 1 ? 0 : t - 1));
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isPaused]);
 
   useEffect(() => {
     if (timeLeft === 0) endTurn();
   }, [timeLeft]);
-
-  const handleGotIt = () => {
-    gotItAction();
-  };
 
   const timeColor =
     timeLeft <= 10 ? palette.danger : timeLeft <= 20 ? palette.warning : ACCENT;
@@ -92,12 +90,25 @@ export default function TurnScreen() {
           <Text style={styles.playerNameText}>{cluegiver}</Text>
           <Text style={styles.scoreText}>{liveScore} pts</Text>
         </View>
+        <Pressable
+          style={styles.pauseBtn}
+          onPress={() => setIsPaused(true)}
+          hitSlop={8}
+        >
+          <Text style={styles.pauseBtnText}>⏸</Text>
+        </Pressable>
       </View>
 
       {/* Card */}
       <View style={styles.cardArea}>
         <View style={styles.card}>
-          <Text style={styles.targetWord}>{card.word}</Text>
+          <Text
+            style={styles.targetWord}
+            adjustsFontSizeToFit
+            numberOfLines={1}
+          >
+            {card.word}
+          </Text>
           <View style={styles.divider} />
           <View style={styles.tabooList}>
             {card.tabooWords.map((w) => (
@@ -115,6 +126,7 @@ export default function TurnScreen() {
         <Pressable
           style={({ pressed }) => [styles.tabooBtn, pressed && styles.tabooBtnPressed]}
           onPress={tabooAction}
+          disabled={isPaused}
         >
           <Text style={styles.tabooBtnText}>🚫 TABOO!</Text>
         </Pressable>
@@ -125,24 +137,42 @@ export default function TurnScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.passBtn,
-            !canPass && styles.passBtnDisabled,
-            pressed && canPass && styles.passBtnPressed,
+            (!canPass || isPaused) && styles.passBtnDisabled,
+            pressed && canPass && !isPaused && styles.passBtnPressed,
           ]}
           onPress={passAction}
-          disabled={!canPass}
+          disabled={!canPass || isPaused}
         >
-          <Text style={[styles.passBtnText, !canPass && { color: palette.border }]}>
+          <Text style={[styles.passBtnText, (!canPass || isPaused) && { color: palette.border }]}>
             Skip ({passesLeft})
           </Text>
         </Pressable>
 
         <Pressable
-          style={({ pressed }) => [styles.gotItBtn, pressed && styles.gotItBtnPressed]}
-          onPress={handleGotIt}
+          style={({ pressed }) => [
+            styles.gotItBtn,
+            isPaused && styles.gotItBtnDisabled,
+            pressed && !isPaused && styles.gotItBtnPressed,
+          ]}
+          onPress={gotItAction}
+          disabled={isPaused}
         >
           <Text style={styles.gotItBtnText}>✓ Got it!</Text>
         </Pressable>
       </View>
+
+      {/* Pause overlay */}
+      {isPaused && (
+        <View style={styles.pauseOverlay}>
+          <Text style={styles.pauseTitle}>Paused</Text>
+          <Pressable
+            style={styles.resumeBtn}
+            onPress={() => setIsPaused(false)}
+          >
+            <Text style={styles.resumeBtnText}>Resume</Text>
+          </Pressable>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -167,7 +197,7 @@ const styles = StyleSheet.create({
   },
   tabooBtnPressed: { backgroundColor: palette.danger + "44" },
   tabooBtnText: {
-    fontSize: 20,
+    fontSize: scaleFont(20),
     fontWeight: "900",
     color: palette.danger,
     letterSpacing: 1,
@@ -190,13 +220,28 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   timerText: {
-    fontSize: 28,
+    fontSize: scaleFont(28),
     fontWeight: "900",
     fontVariant: ["tabular-nums"],
   },
-  playerInfo: { alignItems: "flex-end", gap: 2 },
+  playerInfo: { flex: 1, alignItems: "flex-end", gap: 2 },
   playerNameText: { ...typography.label, color: palette.muted },
   scoreText: { ...typography.heading2, color: ACCENT },
+
+  pauseBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: palette.bgCard,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pauseBtnText: {
+    fontSize: scaleFont(18),
+    color: palette.muted,
+  },
 
   cardArea: {
     flex: 1,
@@ -217,7 +262,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   targetWord: {
-    fontSize: 40,
+    fontSize: scaleFont(40),
     fontWeight: "900",
     color: palette.white,
     textAlign: "center",
@@ -235,7 +280,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   tabooWordIcon: {
-    fontSize: 16,
+    fontSize: scaleFont(16),
     color: palette.danger,
     fontWeight: "700",
     width: 20,
@@ -275,9 +320,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  gotItBtnDisabled: { opacity: 0.5 },
   gotItBtnPressed: { opacity: 0.8 },
   gotItBtnText: {
-    fontSize: 22,
+    fontSize: scaleFont(22),
+    fontWeight: "900",
+    color: palette.white,
+  },
+
+  // Pause overlay
+  pauseOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: palette.bg + "F2",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: spacing.xl,
+    zIndex: 10,
+  },
+  pauseTitle: {
+    fontSize: scaleFont(52),
+    fontWeight: "900",
+    color: palette.white,
+    letterSpacing: -1,
+  },
+  resumeBtn: {
+    backgroundColor: ACCENT,
+    borderRadius: 20,
+    paddingHorizontal: spacing.xxl,
+    paddingVertical: spacing.lg,
+    minWidth: 200,
+    alignItems: "center",
+  },
+  resumeBtnText: {
+    fontSize: scaleFont(22),
     fontWeight: "900",
     color: palette.white,
   },

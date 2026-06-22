@@ -15,6 +15,7 @@ import {
   computeResults,
 } from "../../../src/games/impostor/gameStore";
 import { usePlayerStore } from "../../../src/store/players";
+import { useSessionStore } from "../../../src/store/session";
 
 const ACCENT = palette.impostor;
 const POINTS_PER_WIN = 1;

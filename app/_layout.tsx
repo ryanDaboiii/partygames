@@ -8,7 +8,9 @@ import { usePlayerStore } from "../src/store/players";
 import { subscribeToSession } from "../src/firebase/sessions";
 
 // Persistent watcher — always mounted, works regardless of which screen is active.
-// Handles the case where the host ends the session while players are mid-game.
+// Handles two cases for non-host devices:
+//   1. The host ends the entire session → show alert, navigate to home
+//   2. A game ends (currentGame goes null) → navigate back to hub waiting screen
 function SessionEndWatcher() {
   const router = useRouter();
   const mode = useSessionStore((s) => s.mode);
@@ -17,32 +19,37 @@ function SessionEndWatcher() {
   const clearSession = useSessionStore((s) => s.clearSession);
   const resetAll = usePlayerStore((s) => s.resetAll);
   const handledRef = useRef(false);
+  const inGameRef = useRef(false);
 
   useEffect(() => {
     if (mode !== "online" || isHost || !sessionCode) return;
     handledRef.current = false;
+    inGameRef.current = false;
 
     return subscribeToSession(sessionCode, (data) => {
-      if (!data.ended || handledRef.current) return;
-      handledRef.current = true;
+      // ── Case 1: host ended the whole session ────────────────────────────
+      if (data.ended && !handledRef.current) {
+        handledRef.current = true;
+        const leave = () => { resetAll(); clearSession(); router.replace("/"); };
+        if (Platform.OS === "web") {
+          resetAll(); clearSession();
+          window.alert("The host has ended this session.");
+          router.replace("/");
+        } else {
+          Alert.alert("Session Ended", "The host has ended this session.", [
+            { text: "OK", onPress: leave },
+          ]);
+        }
+        return;
+      }
 
-      const leave = () => {
-        resetAll();
-        clearSession();
-        router.replace("/");
-      };
-
-      if (Platform.OS === "web") {
-        // On web, clear state first, then navigate. Avoids the race between
-        // window.alert unblocking and React re-renders from clearSession().
-        resetAll();
-        clearSession();
-        window.alert("The host has ended this session.");
-        router.replace("/");
-      } else {
-        Alert.alert("Session Ended", "The host has ended this session.", [
-          { text: "OK", onPress: leave },
-        ]);
+      // ── Case 2: game started / ended ─────────────────────────────────────
+      if (data.currentGame && data.gameStatus === "in-progress") {
+        inGameRef.current = true;
+      } else if (!data.currentGame && inGameRef.current) {
+        // A game just ended — navigate non-host back to the hub waiting screen
+        inGameRef.current = false;
+        router.replace("/hub");
       }
     });
   }, [mode, isHost, sessionCode]);

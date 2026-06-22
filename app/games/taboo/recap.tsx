@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Button } from "../../../src/components/Button";
-import { palette, spacing, typography } from "../../../src/theme";
+import { palette, spacing, typography, scaleFont } from "../../../src/theme";
 import { useTabooStore, getCurrentCluegiver } from "../../../src/games/taboo/store";
 
 const ACCENT = palette.taboo;
@@ -39,7 +39,8 @@ export default function RecapScreen() {
   }
 
   const cluegiver = lastTurn.cluegiver;
-  const turnNetPoints = Math.max(0, lastTurn.correct - lastTurn.passed - lastTurn.taboos);
+  // Fix 4: passes don't subtract — only taboos do
+  const turnNetPoints = Math.max(0, lastTurn.correct - lastTurn.taboos);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -72,7 +73,7 @@ export default function RecapScreen() {
           <StatRow
             label="⏭ Passed"
             value={lastTurn.passed}
-            contribution={lastTurn.passed > 0 ? `-${lastTurn.passed}` : "0"}
+            contribution="0"
             color={palette.muted}
           />
           <View style={styles.breakdownDivider} />
@@ -178,7 +179,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   pointsLabel: { ...typography.label, color: ACCENT },
-  pointsValue: { fontSize: 64, fontWeight: "900", color: ACCENT },
+  pointsValue: { fontSize: scaleFont(64), fontWeight: "900", color: ACCENT },
 
   breakdownCard: {
     backgroundColor: palette.bgCard,

@@ -33,7 +33,7 @@ export default function TabooScoreboardScreen() {
   const ranked = [...players].sort((a, b) => (gamePoints[b] ?? 0) - (gamePoints[a] ?? 0));
   const topScore = ranked.length > 0 ? (gamePoints[ranked[0]] ?? 0) : 0;
   const winners = ranked.filter((n) => (gamePoints[n] ?? 0) === topScore);
-  const isTie = winners.length > 1;
+  const isTie = winners.length !== 1;
 
   // Per-player stats from history
   const playerStats: Record<string, { correct: number; passed: number; taboos: number }> = {};

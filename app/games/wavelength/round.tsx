@@ -11,16 +11,18 @@ import {
 import { useRouter } from "expo-router";
 import { Button } from "../../../src/components/Button";
 import { HoldToReveal } from "../../../src/components/HoldToReveal";
-import { palette, spacing, typography } from "../../../src/theme";
+import { palette, spacing, typography, scaleFont } from "../../../src/theme";
 import { useWavelengthStore } from "../../../src/games/wavelength/store";
 
 const ACCENT = palette.wavelength;
+const MAX_SWITCHES = 3;
 
 type LocalPhase =
   | "guesser-select"
   | "guesser-looks-away"
   | "single-reveal"
   | "clue-turn"
+  | "guesser-announces"
   | "outcome";
 
 export default function RoundScreen() {
@@ -33,6 +35,7 @@ export default function RoundScreen() {
   const totalRounds = useWavelengthStore((s) => s.totalRounds);
   const currentRound = useWavelengthStore((s) => s.currentRound);
   const startRound = useWavelengthStore((s) => s.startRound);
+  const switchCategory = useWavelengthStore((s) => s.switchCategory);
   const submitResult = useWavelengthStore((s) => s.submitResult);
 
   // Guesser cycles through players in round order; host can override by tapping
@@ -83,18 +86,27 @@ export default function RoundScreen() {
     if (clueIndex < nonGuessers.length - 1) {
       setClueIndex((i) => i + 1);
     } else {
-      Animated.parallel([
-        Animated.spring(revealScale, { toValue: 1, useNativeDriver: true, tension: 60, friction: 7 }),
-        Animated.timing(revealOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-      ]).start();
-      setLocalPhase("outcome");
+      setLocalPhase("guesser-announces");
     }
+  };
+
+  const handleRevealAnswer = () => {
+    Animated.parallel([
+      Animated.spring(revealScale, { toValue: 1, useNativeDriver: true, tension: 60, friction: 7 }),
+      Animated.timing(revealOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+    ]).start();
+    setLocalPhase("outcome");
   };
 
   const handleRecordResult = (correct: boolean) => {
     submitResult(correct);
     // roundNumber (or phase) will change → useEffect resets local state / redirects
   };
+
+  // Fix 7: show which full cycle we're in, not the raw turn number
+  const cycleNumber = players.length > 0
+    ? Math.ceil(roundNumber / players.length)
+    : roundNumber;
 
   // ─── PHASE: GUESSER SELECT ──────────────────────────────────────────────
 
@@ -103,7 +115,7 @@ export default function RoundScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
-          <RoundBadge round={roundNumber} total={totalRounds} />
+          <RoundBadge round={cycleNumber} total={totalRounds} />
 
           <View style={styles.centerBlock}>
             <Text style={styles.guesserEmoji}>🙈</Text>
@@ -149,7 +161,7 @@ export default function RoundScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.page}>
-          <RoundBadge round={roundNumber} total={totalRounds} />
+          <RoundBadge round={cycleNumber} total={totalRounds} />
           <View style={styles.centerBlock}>
             <Text style={styles.guesserEmoji}>🙈</Text>
             <Text style={styles.guesserAnnounce}>Guesser</Text>
@@ -173,10 +185,12 @@ export default function RoundScreen() {
 
   if (localPhase === "single-reveal" && currentRound) {
     const nonGuessers = currentRound.playerCategories;
+    const categorySwitches = currentRound.categorySwitches;
+
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.page}>
-          <RoundBadge round={roundNumber} total={totalRounds} />
+          <RoundBadge round={cycleNumber} total={totalRounds} />
 
           <Text style={styles.passPrompt}>Everyone except the Guesser, look together</Text>
           <Text style={styles.passHint}>Hold to reveal the number and your categories</Text>
@@ -196,14 +210,37 @@ export default function RoundScreen() {
                 <Text style={styles.categoryCardOf}>out of {maxNumber}</Text>
                 <View style={styles.cardDivider} />
                 <View style={styles.revealAllList}>
-                  {nonGuessers.map(({ player, category }) => (
-                    <View key={player.id} style={styles.revealAllRow}>
-                      <Text style={styles.revealAllName}>{player.name}</Text>
-                      <Text style={[styles.revealAllCategory, { color: ACCENT }]}>
-                        {category.name}
-                      </Text>
-                    </View>
-                  ))}
+                  {nonGuessers.map(({ player, category }, catIndex) => {
+                    const switchesUsed = categorySwitches[player.id] ?? 0;
+                    const switchesLeft = MAX_SWITCHES - switchesUsed;
+                    return (
+                      <View key={player.id} style={styles.revealAllRow}>
+                        <Text style={styles.revealAllName}>{player.name}</Text>
+                        <View style={styles.revealAllRight}>
+                          <Text style={[styles.revealAllCategory, { color: ACCENT }]}>
+                            {category.name}
+                          </Text>
+                          <Pressable
+                            style={[
+                              styles.switchBtn,
+                              switchesLeft <= 0 && styles.switchBtnDisabled,
+                            ]}
+                            onPress={() => switchCategory(catIndex)}
+                            disabled={switchesLeft <= 0}
+                          >
+                            <Text style={[
+                              styles.switchBtnText,
+                              switchesLeft <= 0 && styles.switchBtnTextDisabled,
+                            ]}>
+                              {switchesLeft > 0
+                                ? `↻ New category (${switchesLeft} left)`
+                                : "No more switches"}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    );
+                  })}
                 </View>
               </View>
             </HoldToReveal>
@@ -230,10 +267,24 @@ export default function RoundScreen() {
     const isLast = clueIndex === nonGuessers.length - 1;
     const guesserName = players[currentRound.guesserIndex]?.name ?? "Guesser";
 
+    const handleClueBack = () => {
+      if (clueIndex > 0) {
+        setClueIndex((i) => i - 1);
+      } else {
+        setCardRevealed(false);
+        setLocalPhase("single-reveal");
+      }
+    };
+
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.page}>
-          <RoundBadge round={roundNumber} total={totalRounds} />
+          <View style={styles.topRow}>
+            <Pressable style={styles.backBtn} onPress={handleClueBack} hitSlop={12}>
+              <Text style={styles.backBtnText}>‹ Back</Text>
+            </Pressable>
+            <RoundBadge round={cycleNumber} total={totalRounds} />
+          </View>
 
           <View>
             <Text style={styles.sectionTitle}>Clue Phase</Text>
@@ -251,8 +302,34 @@ export default function RoundScreen() {
           </View>
 
           <Button
-            label={isLast ? "Done — reveal the number →" : "Done — next player →"}
+            label={isLast ? "Done — all clues given →" : "Done — next player →"}
             onPress={handleClueNext}
+            accentColor={ACCENT}
+            fullWidth
+          />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ─── PHASE: GUESSER ANNOUNCES ────────────────────────────────────────────
+
+  if (localPhase === "guesser-announces" && currentRound) {
+    const guesserName = players[currentRound.guesserIndex]?.name ?? "Guesser";
+    return (
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.page}>
+          <RoundBadge round={cycleNumber} total={totalRounds} />
+
+          <View style={styles.centerBlock}>
+            <Text style={styles.guesserEmoji}>🎯</Text>
+            <Text style={[styles.guesserName, { color: ACCENT }]}>{guesserName}</Text>
+            <Text style={styles.guesserAnnounce}>tell everyone your guess!</Text>
+          </View>
+
+          <Button
+            label="Reveal the answer →"
+            onPress={handleRevealAnswer}
             accentColor={ACCENT}
             fullWidth
           />
@@ -268,7 +345,7 @@ export default function RoundScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.page}>
-          <RoundBadge round={roundNumber} total={totalRounds} />
+          <RoundBadge round={cycleNumber} total={totalRounds} />
 
           <View style={styles.revealBlock}>
             <Text style={styles.revealLabel}>The secret number was</Text>
@@ -331,7 +408,7 @@ const styles = StyleSheet.create({
 
   // Guesser select
   centerBlock: { flex: 1, justifyContent: "center", alignItems: "center", gap: spacing.sm },
-  guesserEmoji: { fontSize: 64, marginBottom: spacing.sm },
+  guesserEmoji: { fontSize: scaleFont(64), marginBottom: spacing.sm },
   guesserAnnounce: { ...typography.body, color: palette.muted },
   guesserName: { ...typography.display },
   playerGrid: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
@@ -357,7 +434,7 @@ const styles = StyleSheet.create({
   revealAllList: { width: "100%", gap: spacing.md, marginTop: spacing.sm },
   revealAllRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     width: "100%",
     backgroundColor: palette.bgCard,
@@ -366,9 +443,38 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+    gap: spacing.sm,
   },
-  revealAllName: { ...typography.bodyBold, color: palette.white },
-  revealAllCategory: { ...typography.bodyBold },
+  revealAllName: { ...typography.bodyBold, color: palette.white, paddingTop: 2 },
+  revealAllRight: {
+    flex: 1,
+    alignItems: "flex-end",
+    gap: spacing.xs,
+  },
+  revealAllCategory: { ...typography.bodyBold, textAlign: "right", flexShrink: 1 },
+
+  // Category switch button
+  switchBtn: {
+    backgroundColor: ACCENT + "18",
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: ACCENT + "55",
+  },
+  switchBtnDisabled: {
+    borderColor: palette.border,
+    backgroundColor: palette.bgCard,
+    opacity: 0.55,
+  },
+  switchBtnText: {
+    fontSize: scaleFont(11),
+    fontWeight: "600",
+    color: ACCENT,
+  },
+  switchBtnTextDisabled: {
+    color: palette.muted,
+  },
 
   // Clue turn
   sectionTitle: { ...typography.heading2, color: palette.white },
@@ -380,7 +486,7 @@ const styles = StyleSheet.create({
   // Outcome phase
   revealBlock: { alignItems: "center", gap: spacing.xs, paddingVertical: spacing.sm },
   revealLabel: { ...typography.body, color: palette.muted },
-  revealNumber: { fontSize: 96, fontWeight: "900" as const, letterSpacing: -3, lineHeight: 108 },
+  revealNumber: { fontSize: scaleFont(96), fontWeight: "900" as const, letterSpacing: -3, lineHeight: scaleFont(108) },
   revealGuessLine: { ...typography.caption, color: palette.muted, marginTop: spacing.xs },
   outcomeBtnRow: { flexDirection: "row", gap: spacing.md },
   outcomeBtn: {
@@ -394,12 +500,17 @@ const styles = StyleSheet.create({
   },
   outcomeBtnCorrect: { borderColor: palette.success },
   outcomeBtnWrong: { borderColor: palette.danger },
-  outcomeBtnEmoji: { fontSize: 36 },
+  outcomeBtnEmoji: { fontSize: scaleFont(36) },
   outcomeBtnText: { ...typography.bodyBold, color: palette.white },
 
   // Shared
   section: { gap: spacing.sm },
   sectionLabel: { ...typography.label, color: palette.muted },
+
+  // Clue-turn back navigation
+  topRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  backBtn: { paddingVertical: spacing.xs, paddingRight: spacing.md },
+  backBtnText: { ...typography.bodyBold, color: palette.muted },
 });
 
 const rbStyles = StyleSheet.create({

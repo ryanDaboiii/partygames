@@ -6,6 +6,7 @@ export interface Player {
   id: string;
   name: string;
   totalScore: number;
+  firebaseUid?: string;
 }
 
 interface PlayerStore {
@@ -13,6 +14,7 @@ interface PlayerStore {
   addPlayer: (name: string) => void;
   removePlayer: (id: string) => void;
   addPoints: (playerId: string, points: number) => void;
+  linkFirebaseUid: (localId: string, uid: string) => void;
   resetScores: () => void;
   resetAll: () => void;
 }
@@ -45,6 +47,13 @@ export const usePlayerStore = create<PlayerStore>()(
         set((s) => ({
           players: s.players.map((p) =>
             p.id === playerId ? { ...p, totalScore: p.totalScore + points } : p
+          ),
+        })),
+
+      linkFirebaseUid: (localId, uid) =>
+        set((s) => ({
+          players: s.players.map((p) =>
+            p.id === localId ? { ...p, firebaseUid: uid } : p
           ),
         })),
 

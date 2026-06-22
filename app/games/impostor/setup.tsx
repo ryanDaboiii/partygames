@@ -22,7 +22,7 @@ import {
   type SessionPlayer,
 } from "../../../src/firebase/sessions";
 import { useGameIntro } from "../../../src/components/GameIntroOverlay";
-import type { ImpostorCategory, Player } from "../../../src/games/impostor/types";
+import type { ImpostorCategory, Player, VotingMode } from "../../../src/games/impostor/types";
 
 const ACCENT = palette.impostor;
 const MIN_PLAYERS = 3;
@@ -46,6 +46,7 @@ export default function SetupScreen() {
   const initialized = useRef(false);
   const [impostorCount, setImpostorCount] = useState(1);
   const [category, setCategory] = useState<ImpostorCategory>("Animals");
+  const [votingMode, setVotingMode] = useState<VotingMode>("app");
   const [starting, setStarting] = useState(false);
   const { showThen, overlay } = useGameIntro();
 
@@ -109,7 +110,7 @@ export default function SetupScreen() {
       setStarting(true);
       try {
         reset();
-        await startImpostorGame(sessionCode, liveSessionPlayers, category, impostorCount);
+        await startImpostorGame(sessionCode, liveSessionPlayers, category, impostorCount, votingMode);
         await setSessionCurrentGame(sessionCode, "impostor");
         showThen(
           { icon: "🕵️", title: "Impostor", accentColor: ACCENT },
@@ -266,6 +267,43 @@ export default function SetupScreen() {
           </Section>
         )}
 
+        {/* Voting mode — only meaningful in online mode; pass-and-play always uses host-decides */}
+        {isOnline && <View style={styles.votingModeSection}>
+          <Text style={styles.votingModeSectionLabel}>VOTING MODE</Text>
+          <View style={styles.votingModeRow}>
+            <Pressable
+              style={[
+                styles.votingModeCard,
+                votingMode === "app" && { borderColor: ACCENT, backgroundColor: ACCENT + "18" },
+              ]}
+              onPress={() => setVotingMode("app")}
+            >
+              <Text style={styles.votingModeIcon}>🗳️</Text>
+              <Text style={[styles.votingModeTitle, votingMode === "app" && { color: ACCENT }]}>
+                In-App Voting
+              </Text>
+              <Text style={styles.votingModeDesc}>
+                Each player votes privately on their device
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.votingModeCard,
+                votingMode === "host" && { borderColor: ACCENT, backgroundColor: ACCENT + "18" },
+              ]}
+              onPress={() => setVotingMode("host")}
+            >
+              <Text style={styles.votingModeIcon}>🗣️</Text>
+              <Text style={[styles.votingModeTitle, votingMode === "host" && { color: ACCENT }]}>
+                Host Decides
+              </Text>
+              <Text style={styles.votingModeDesc}>
+                Group votes aloud, host picks the result
+              </Text>
+            </Pressable>
+          </View>
+        </View>}
+
         <Button
           label="Start Game"
           onPress={handleStart}
@@ -381,5 +419,35 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   warningText: { ...typography.caption, color: palette.danger, marginTop: spacing.sm },
-  startBtn: { marginTop: spacing.lg },
+  startBtn: { marginTop: spacing.sm },
+  votingModeSection: { marginBottom: spacing.lg },
+  votingModeSectionLabel: {
+    ...typography.label,
+    color: palette.muted,
+    marginBottom: spacing.md,
+  },
+  votingModeRow: { flexDirection: "row", gap: spacing.md },
+  votingModeCard: {
+    flex: 1,
+    backgroundColor: palette.bgCard,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: palette.border,
+    padding: spacing.md,
+    alignItems: "center",
+  },
+  votingModeIcon: { fontSize: 28, marginBottom: spacing.xs },
+  votingModeTitle: {
+    ...typography.caption,
+    color: palette.white,
+    fontWeight: "700" as const,
+    textAlign: "center" as const,
+    marginBottom: spacing.xs,
+  },
+  votingModeDesc: {
+    ...typography.caption,
+    color: palette.muted,
+    textAlign: "center" as const,
+    lineHeight: 18,
+  },
 });

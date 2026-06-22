@@ -5,6 +5,7 @@ import {
   updateDoc,
   onSnapshot,
   serverTimestamp,
+  increment,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./config";
@@ -27,13 +28,18 @@ export interface ActiveGame {
 
 export interface SessionPlayer {
   name: string;
+  totalScore?: number;
 }
 
 export interface SessionImpostorGame {
-  status: "discussion" | "ended";
+  status: "discussion" | "voting" | "reveal" | "ended";
   secretWord: string;
   impostorUids: string[];
   winner?: "crewmates" | "impostors";
+  votingMode: "app" | "host";
+  votes: Record<string, string>; // voterId → targetPlayerId
+  eliminatedPlayerId: string | null;
+  impostorCaught: boolean | null;
 }
 
 export interface SessionData {
@@ -141,7 +147,8 @@ export async function startImpostorGame(
   sessionCode: string,
   sessionPlayers: Record<string, SessionPlayer>,
   category: ImpostorCategory,
-  impostorCount: number
+  impostorCount: number,
+  votingMode: "app" | "host" = "app"
 ): Promise<void> {
   const secretWord = getRandomWord(category);
   const playerUids = Object.keys(sessionPlayers);
@@ -164,6 +171,10 @@ export async function startImpostorGame(
       status: "discussion",
       secretWord,
       impostorUids: [...impostorUidSet],
+      votingMode,
+      votes: {},
+      eliminatedPlayerId: null,
+      impostorCaught: null,
     },
   });
 }
@@ -185,6 +196,36 @@ export function subscribeToImpostorRole(
 export async function endImpostorGame(sessionCode: string): Promise<void> {
   await updateDoc(doc(db, "sessions", sessionCode), {
     "impostorGame.status": "ended",
+  });
+}
+
+export async function startImpostorVoting(sessionCode: string): Promise<void> {
+  await updateDoc(doc(db, "sessions", sessionCode), {
+    "impostorGame.status": "voting",
+  });
+}
+
+export async function submitImpostorVote(
+  sessionCode: string,
+  voterId: string,
+  targetId: string
+): Promise<void> {
+  await updateDoc(doc(db, "sessions", sessionCode), {
+    [`impostorGame.votes.${voterId}`]: targetId,
+  });
+}
+
+export async function revealImpostorResult(
+  sessionCode: string,
+  eliminatedPlayerId: string | null,
+  impostorCaught: boolean,
+  votes: Record<string, string>
+): Promise<void> {
+  await updateDoc(doc(db, "sessions", sessionCode), {
+    "impostorGame.status": "reveal",
+    "impostorGame.eliminatedPlayerId": eliminatedPlayerId,
+    "impostorGame.impostorCaught": impostorCaught,
+    "impostorGame.votes": votes,
   });
 }
 
@@ -229,4 +270,19 @@ export async function setSessionScoringMode(
   mode: "conventional" | "extended"
 ): Promise<void> {
   await updateDoc(doc(db, "sessions", sessionCode), { scoringMode: mode });
+}
+
+// ── Score writing ─────────────────────────────────────────────────────────
+
+// Atomically increments a player's totalScore in Firestore for online sessions.
+// Call alongside the local addPoints — never instead of it.
+export async function addPointsOnline(
+  sessionCode: string,
+  playerUid: string,
+  points: number
+): Promise<void> {
+  if (points <= 0) return;
+  await updateDoc(doc(db, "sessions", sessionCode), {
+    [`players.${playerUid}.totalScore`]: increment(points),
+  });
 }

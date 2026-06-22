@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     padding: spacing.md,
   },
-  rank: { fontSize: 22, width: 34 },
+  rank: { fontSize: 22, width: 34, color: palette.muted },
   scoreName: { ...typography.bodyBold, color: palette.white, flex: 1 },
   scorePoints: { ...typography.heading3, color: palette.muted },
   historyRow: {

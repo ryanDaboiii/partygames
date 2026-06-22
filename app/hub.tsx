@@ -101,7 +101,7 @@ export default function HubScreen() {
     const doNav = () => {
       switch (gameId) {
         case "impostor": router.push("/games/impostor/online/play"); break;
-        case "wavelength": router.push("/game-in-progress" as any); break;
+        case "wavelength": router.push("/games/wavelength/online" as any); break;
         case "taboo": router.push("/games/taboo/spectator" as any); break;
         default: router.push("/game-in-progress" as any); break;
       }
@@ -187,9 +187,19 @@ export default function HubScreen() {
     : null;
 
   // ════════════════════════════════════════════════════════════════════════════
-  // NON-HOST ONLINE: waiting screen
+  // NON-HOST ONLINE: waiting screen with live leaderboard
   // ════════════════════════════════════════════════════════════════════════════
   if (mode === "online" && !isHost) {
+    // Merge online player list with local scores (UID-first, name fallback)
+    const leaderboard = (onlinePlayers ?? [])
+      .map(({ uid, name, isHostPlayer }) => {
+        const local = players.find(
+          (p) => p.firebaseUid === uid || p.name.toLowerCase() === name.toLowerCase()
+        );
+        return { uid, name, isHostPlayer, score: local?.totalScore ?? 0 };
+      })
+      .sort((a, b) => b.score - a.score);
+
     return (
       <SafeAreaView style={styles.safe}>
         <ScrollView
@@ -225,26 +235,34 @@ export default function HubScreen() {
           {/* Waiting message */}
           <View style={styles.waitingCard}>
             <Text style={styles.waitingEmoji}>⏳</Text>
-            <Text style={styles.waitingTitle}>Waiting for the host</Text>
+            <Text style={styles.waitingTitle}>
+              {hostName ? `Waiting for ${hostName}` : "Waiting for the host"}
+            </Text>
             <Text style={styles.waitingBody}>
-              {hostName ? `${hostName} will choose the next game.` : "The host will choose the next game."}
+              {hostName ? `${hostName} is choosing the next game…` : "The host is choosing the next game…"}
             </Text>
           </View>
 
-          {/* Players in session */}
+          {/* Live leaderboard */}
           <View style={styles.rosterSection}>
             <Text style={styles.sectionLabel}>
-              Players in session ({onlinePlayers?.length ?? 0})
+              Leaderboard ({leaderboard.length} players)
             </Text>
-            {onlinePlayers && onlinePlayers.length > 0 ? (
-              <View style={styles.onlinePlayerList}>
-                {onlinePlayers.map(({ uid, name, isHostPlayer }) => (
-                  <View key={uid} style={styles.onlinePlayerRow}>
+            {leaderboard.length > 0 ? (
+              <View style={styles.leaderboardList}>
+                {leaderboard.map(({ uid, name, isHostPlayer, score }, i) => (
+                  <View key={uid} style={[
+                    styles.leaderboardRow,
+                    i === 0 && score > 0 && styles.leaderboardRowFirst,
+                  ]}>
+                    <Text style={[styles.leaderboardRank, i === 0 && score > 0 && { color: palette.warning }]}>
+                      {i === 0 && score > 0 ? "🥇" : i === 1 && score > 0 ? "🥈" : i === 2 && score > 0 ? "🥉" : `${i + 1}.`}
+                    </Text>
                     <View style={styles.avatar}>
                       <Text style={styles.avatarText}>{getInitials(name)}</Text>
                     </View>
-                    <Text style={styles.onlinePlayerName}>{name}</Text>
-                    <View style={styles.badgeRow}>
+                    <Text style={styles.leaderboardName} numberOfLines={1}>{name}</Text>
+                    <View style={styles.leaderboardRight}>
                       {isHostPlayer && (
                         <View style={styles.hostBadge}>
                           <Text style={styles.hostBadgeText}>HOST</Text>
@@ -255,6 +273,9 @@ export default function HubScreen() {
                           <Text style={styles.youBadgeText}>YOU</Text>
                         </View>
                       )}
+                      <Text style={[styles.leaderboardScore, i === 0 && score > 0 && { color: palette.warning }]}>
+                        {score} {score === 1 ? "pt" : "pts"}
+                      </Text>
                     </View>
                   </View>
                 ))}
@@ -615,6 +636,42 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   onlinePlayerName: { ...typography.bodyBold, color: palette.white, flex: 1 },
+
+  // Leaderboard (non-host waiting screen)
+  leaderboardList: { gap: spacing.sm },
+  leaderboardRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: palette.bgCard,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  leaderboardRowFirst: {
+    borderColor: palette.warning + "88",
+    backgroundColor: palette.warning + "0D",
+  },
+  leaderboardRank: {
+    ...typography.bodyBold,
+    color: palette.muted,
+    width: 32,
+    textAlign: "center" as const,
+  },
+  leaderboardName: { ...typography.bodyBold, color: palette.white, flex: 1 },
+  leaderboardRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  leaderboardScore: {
+    ...typography.bodyBold,
+    color: palette.muted,
+    minWidth: 44,
+    textAlign: "right" as const,
+  },
 
   // ── Modal ──────────────────────────────────────────────────────────────────
   modalBackdrop: {

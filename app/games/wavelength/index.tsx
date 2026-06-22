@@ -6,6 +6,7 @@ import {
   StyleSheet,
   SafeAreaView,
   Pressable,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Button } from "../../../src/components/Button";
@@ -13,7 +14,13 @@ import { palette, spacing, typography } from "../../../src/theme";
 import { useWavelengthStore } from "../../../src/games/wavelength/store";
 import { usePlayerStore } from "../../../src/store/players";
 import { useSessionStore } from "../../../src/store/session";
-import { setSessionCurrentGame } from "../../../src/firebase/sessions";
+import { subscribeToSession, setSessionCurrentGame } from "../../../src/firebase/sessions";
+import {
+  startWavelengthRound,
+  type WavelengthFSState,
+  type WavelengthFSAssignment,
+} from "../../../src/firebase/wavelength";
+import { pickCategories } from "../../../src/games/wavelength/categories";
 import { useGameIntro } from "../../../src/components/GameIntroOverlay";
 import type { Player } from "../../../src/games/wavelength/types";
 
@@ -30,22 +37,43 @@ export default function WavelengthSetup() {
   const roster = usePlayerStore((s) => s.players);
   const mode = useSessionStore((s) => s.mode);
   const sessionCode = useSessionStore((s) => s.sessionCode);
+  const isHost = useSessionStore((s) => s.isHost);
 
-  // Sitting-out exclusion — default everyone in
+  // Online mode: live session player list (uid → name)
+  const [onlinePlayerList, setOnlinePlayerList] = useState<{ uid: string; name: string }[]>([]);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const initialized = useRef(false);
   const [maxNumber, setMaxNumber] = useState(10);
-  const [totalRounds, setTotalRounds] = useState(4);
+  const [totalRounds, setTotalRounds] = useState(1);
   const [showExclusion, setShowExclusion] = useState(false);
+  const [busy, setBusy] = useState(false);
   const { showThen, overlay } = useGameIntro();
 
+  // Online: subscribe to session for live player list
   useEffect(() => {
+    if (mode !== "online" || !sessionCode) return;
+    return subscribeToSession(sessionCode, (data) => {
+      const list = Object.entries(data.players).map(([uid, p]) => ({
+        uid,
+        name: p.name,
+      }));
+      setOnlinePlayerList(list);
+      if (!initialized.current && list.length >= MIN_PLAYERS) {
+        setSelectedIds(new Set(list.map((p) => p.uid)));
+        initialized.current = true;
+      }
+    });
+  }, [mode, sessionCode]);
+
+  // Offline: initialize from local roster
+  useEffect(() => {
+    if (mode === "online") return;
     if (!initialized.current && roster.length > 0) {
       setSelectedIds(new Set(roster.map((p) => p.id)));
-      setTotalRounds(roster.length);
       initialized.current = true;
     }
-  }, [roster]);
+  }, [roster, mode]);
 
   const toggleSelected = (id: string) => {
     setSelectedIds((prev) => {
@@ -56,11 +84,73 @@ export default function WavelengthSetup() {
     });
   };
 
+  // Use the right player list depending on mode
+  const displayList =
+    mode === "online"
+      ? onlinePlayerList.map((p) => ({ id: p.uid, name: p.name }))
+      : roster.map((p) => ({ id: p.id, name: p.name }));
+
   const selectedCount = selectedIds.size;
   const canStart = selectedCount >= MIN_PLAYERS;
 
   const handleStart = async () => {
     if (!canStart) return;
+
+    if (mode === "online" && sessionCode && isHost) {
+      // ── Online mode: write initial round state to Firestore ──────────────
+      const activePlayers = onlinePlayerList.filter((p) => selectedIds.has(p.uid));
+      const playerOrder = [...activePlayers].sort(() => Math.random() - 0.5).map((p) => p.uid);
+      const playerNames: Record<string, string> = {};
+      for (const p of activePlayers) playerNames[p.uid] = p.name;
+
+      const guesserIdx = 0; // round 1 guesser = playerOrder[0]
+      const guesserId = playerOrder[guesserIdx];
+      const nonGuessers = playerOrder.filter((uid) => uid !== guesserId);
+      const secretNumber = Math.floor(Math.random() * maxNumber) + 1;
+      const cats = pickCategories(nonGuessers.length);
+      const assignments: Record<string, WavelengthFSAssignment> = {};
+      nonGuessers.forEach((uid, i) => {
+        assignments[uid] = { categoryName: cats[i].name, categoryHint: cats[i].hint };
+      });
+
+      const initialState: WavelengthFSState = {
+        phase: "reveal",
+        round: 1,
+        totalRounds,
+        totalTurns: totalRounds * playerOrder.length,
+        guesserId,
+        secretNumber,
+        range: maxNumber,
+        playerOrder,
+        playerNames,
+        assignments,
+        categorySwitches: {},
+        revealedBy: [],
+        turnOrder: [],
+        currentTurnIndex: 0,
+        guess: null,
+        result: null,
+      };
+
+      setBusy(true);
+      try {
+        await startWavelengthRound(sessionCode, initialState);
+        await setSessionCurrentGame(sessionCode, "wavelength");
+      } catch (e: any) {
+        Alert.alert("Error", e.message ?? "Could not start game");
+        setBusy(false);
+        return;
+      }
+      setBusy(false);
+
+      showThen(
+        { icon: "📡", title: "Wavelength", accentColor: ACCENT },
+        () => router.push("/games/wavelength/online")
+      );
+      return;
+    }
+
+    // ── Offline mode: local store ─────────────────────────────────────────
     reset();
     const players: Player[] = roster
       .filter((p) => selectedIds.has(p.id))
@@ -114,7 +204,7 @@ export default function WavelengthSetup() {
           <View style={styles.rangeRow}>
             <View style={styles.rangeLabel}>
               <Text style={styles.rangeLabelText}>{totalRounds} rounds</Text>
-              <Text style={styles.rangeHint}>Everyone gets a turn as Guesser</Text>
+              <Text style={styles.rangeHint}>Everyone gets a turn as Guesser per round</Text>
             </View>
             <Stepper
               value={totalRounds}
@@ -126,19 +216,19 @@ export default function WavelengthSetup() {
           </View>
         </Section>
 
-        {/* Sitting-out exclusion (collapsed by default) */}
+        {/* Sitting-out exclusion */}
         <Pressable
           style={styles.exclusionToggle}
           onPress={() => setShowExclusion((v) => !v)}
         >
           <Text style={styles.exclusionToggleText}>
-            {showExclusion ? "▾" : "▸"} Sitting out? ({selectedCount} of {roster.length} playing)
+            {showExclusion ? "▾" : "▸"} Sitting out? ({selectedCount} of {displayList.length} playing)
           </Text>
         </Pressable>
 
-        {showExclusion && roster.length > 0 && (
+        {showExclusion && displayList.length > 0 && (
           <View style={styles.rosterList}>
-            {roster.map((p) => {
+            {displayList.map((p) => {
               const selected = selectedIds.has(p.id);
               return (
                 <Pressable
@@ -172,6 +262,7 @@ export default function WavelengthSetup() {
           accentColor={ACCENT}
           fullWidth
           disabled={!canStart}
+          loading={busy}
           style={styles.startBtn}
         />
       </ScrollView>

@@ -13,9 +13,9 @@ import { Timer } from "../../../src/components/Timer";
 import { palette, spacing, typography } from "../../../src/theme";
 import { useImpostorStore } from "../../../src/games/impostor/gameStore";
 import { usePlayerStore } from "../../../src/store/players";
+import { useSessionStore } from "../../../src/store/session";
 
 const ACCENT = palette.impostor;
-const POINTS_PER_WIN = 1;
 
 export default function DiscussionScreen() {
   const router = useRouter();
@@ -24,6 +24,7 @@ export default function DiscussionScreen() {
   const speakingOrder = useImpostorStore((s) => s.speakingOrder);
   const reset = useImpostorStore((s) => s.reset);
   const addPoints = usePlayerStore((s) => s.addPoints);
+  const scoringMode = useSessionStore((s) => s.scoringMode);
 
   const [showTimer, setShowTimer] = useState(false);
   const [winnerSelection, setWinnerSelection] = useState<string | null>(null);
@@ -34,19 +35,22 @@ export default function DiscussionScreen() {
 
   const handleAwardCrewmates = () => {
     if (winnerSelection) return;
-    crewmates.forEach((a) => addPoints(a.player.id, POINTS_PER_WIN));
+    const pts = scoringMode === "extended" ? 3 : 1;
+    crewmates.forEach((a) => addPoints(a.player.id, pts));
     setWinnerSelection("Crewmates");
   };
 
   const handleAwardImpostors = () => {
     if (winnerSelection) return;
-    impostors.forEach((a) => addPoints(a.player.id, POINTS_PER_WIN));
+    const pts = scoringMode === "extended" ? 4 : 1;
+    impostors.forEach((a) => addPoints(a.player.id, pts));
     setWinnerSelection("Impostors");
   };
 
   const handleAwardSpecificImpostor = (id: string, name: string) => {
     if (winnerSelection) return;
-    addPoints(id, POINTS_PER_WIN);
+    const pts = scoringMode === "extended" ? 4 : 1;
+    addPoints(id, pts);
     setWinnerSelection(name);
   };
 

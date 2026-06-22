@@ -109,14 +109,17 @@ export const useTabooStore = create<TabooStore>((set, get) => ({
   },
 
   endTurn: () => {
-    const { totalTurnsPlayed, players, turnCorrect, turnPassed, turnTaboos, turnHistory, gamePoints } = get();
+    const { totalTurnsPlayed, players, turnCorrect, turnPassed, turnTaboos, turnHistory, gamePoints, cardIndex, deck } = get();
     if (get().phase === "turn-recap") return; // guard against double-call
 
     const cluegiver = players[totalTurnsPlayed % players.length];
     const roundNumber = Math.floor(totalTurnsPlayed / players.length) + 1;
-    const netScore = Math.max(0, turnCorrect - turnPassed - turnTaboos);
+    // Fix 4: passes are neutral — only taboos subtract
+    const netScore = Math.max(0, turnCorrect - turnTaboos);
 
     set({
+      // Fix 3: advance past the card that was on screen when time ran out
+      cardIndex: (cardIndex + 1) % deck.length,
       turnHistory: [
         ...turnHistory,
         { cluegiver, correct: turnCorrect, passed: turnPassed, taboos: turnTaboos, roundNumber },

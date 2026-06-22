@@ -27,7 +27,11 @@ export function useGameIntro() {
         Animated.timing(opacity, { toValue: 0, duration: 400, useNativeDriver: true }),
       ]).start(() => {
         setGameInfo(null);
-        callback();
+        // Defer navigation one tick so iOS can finish the Modal's native dismiss
+        // before the stack navigator starts its slide-from-right transition.
+        // Without this, both UIViewController transitions fire in the same tick
+        // and iOS drops one, leaving a black screen.
+        setTimeout(callback, 0);
       });
     },
     [opacity, scale]

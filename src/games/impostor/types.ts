@@ -1,5 +1,7 @@
 export type GameMode = "pass-and-play" | "online";
 
+export type VotingMode = "app" | "host";
+
 export interface Player {
   id: string;
   name: string;

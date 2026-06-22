@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { scaleFont } from "./scale";
 
 const fontFamily = Platform.select({
   ios: "System",
@@ -9,46 +10,46 @@ const fontFamily = Platform.select({
 export const typography = {
   display: {
     fontFamily,
-    fontSize: 48,
+    fontSize: scaleFont(48),
     fontWeight: "900" as const,
     letterSpacing: -1,
   },
   heading1: {
     fontFamily,
-    fontSize: 32,
+    fontSize: scaleFont(32),
     fontWeight: "800" as const,
     letterSpacing: -0.5,
   },
   heading2: {
     fontFamily,
-    fontSize: 24,
+    fontSize: scaleFont(24),
     fontWeight: "700" as const,
   },
   heading3: {
     fontFamily,
-    fontSize: 18,
+    fontSize: scaleFont(18),
     fontWeight: "700" as const,
   },
   body: {
     fontFamily,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: "400" as const,
-    lineHeight: 24,
+    lineHeight: scaleFont(24),
   },
   bodyBold: {
     fontFamily,
-    fontSize: 16,
+    fontSize: scaleFont(16),
     fontWeight: "600" as const,
   },
   caption: {
     fontFamily,
-    fontSize: 13,
+    fontSize: scaleFont(13),
     fontWeight: "500" as const,
     letterSpacing: 0.3,
   },
   label: {
     fontFamily,
-    fontSize: 11,
+    fontSize: scaleFont(11),
     fontWeight: "700" as const,
     letterSpacing: 1.2,
     textTransform: "uppercase" as const,

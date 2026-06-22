@@ -14,6 +14,7 @@ export interface CurrentRound {
   guesserIndex: number;
   secretNumber: number;
   playerCategories: PlayerCategory[];
+  categorySwitches: Record<string, number>; // keyed by player.id, counts switches used this round
 }
 
 export interface RoundResult {
