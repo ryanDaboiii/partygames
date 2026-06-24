@@ -9,8 +9,8 @@ import {
   Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Button } from "../../../src/components/Button";
-import { palette, spacing, typography } from "../../../src/theme";
+import { GameButton } from "../../../src/components/GameButton";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useWavelengthStore } from "../../../src/games/wavelength/store";
 import { usePlayerStore } from "../../../src/store/players";
 import { useSessionStore } from "../../../src/store/session";
@@ -22,9 +22,15 @@ import {
 } from "../../../src/firebase/wavelength";
 import { pickCategories } from "../../../src/games/wavelength/categories";
 import { useGameIntro } from "../../../src/components/GameIntroOverlay";
+import { WavelengthIcon } from "../../../src/assets/icons/WavelengthIcon";
+import { ChevronDownIcon } from "../../../src/assets/icons/ChevronDownIcon";
+import { CheckIcon } from "../../../src/assets/icons/CheckIcon";
+import { BackButton } from "../../../src/components/BackButton";
+import { getGameTheme } from "../../../src/games/registry";
 import type { Player } from "../../../src/games/wavelength/types";
 
-const ACCENT = palette.wavelength;
+const GAME_THEME = getGameTheme("wavelength");
+const ACCENT = GAME_THEME.accent;
 const MIN_PLAYERS = 3;
 const MIN_MAX = 5;
 const MAX_MAX = 20;
@@ -39,18 +45,17 @@ export default function WavelengthSetup() {
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const isHost = useSessionStore((s) => s.isHost);
 
-  // Online mode: live session player list (uid → name)
   const [onlinePlayerList, setOnlinePlayerList] = useState<{ uid: string; name: string }[]>([]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const initialized = useRef(false);
   const [maxNumber, setMaxNumber] = useState(10);
   const [totalRounds, setTotalRounds] = useState(1);
+  const [categoryStyle, setCategoryStyle] = useState<"specific" | "simple">("simple");
   const [showExclusion, setShowExclusion] = useState(false);
   const [busy, setBusy] = useState(false);
   const { showThen, overlay } = useGameIntro();
 
-  // Online: subscribe to session for live player list
   useEffect(() => {
     if (mode !== "online" || !sessionCode) return;
     return subscribeToSession(sessionCode, (data) => {
@@ -66,7 +71,6 @@ export default function WavelengthSetup() {
     });
   }, [mode, sessionCode]);
 
-  // Offline: initialize from local roster
   useEffect(() => {
     if (mode === "online") return;
     if (!initialized.current && roster.length > 0) {
@@ -84,7 +88,6 @@ export default function WavelengthSetup() {
     });
   };
 
-  // Use the right player list depending on mode
   const displayList =
     mode === "online"
       ? onlinePlayerList.map((p) => ({ id: p.uid, name: p.name }))
@@ -97,20 +100,19 @@ export default function WavelengthSetup() {
     if (!canStart) return;
 
     if (mode === "online" && sessionCode && isHost) {
-      // ── Online mode: write initial round state to Firestore ──────────────
       const activePlayers = onlinePlayerList.filter((p) => selectedIds.has(p.uid));
       const playerOrder = [...activePlayers].sort(() => Math.random() - 0.5).map((p) => p.uid);
       const playerNames: Record<string, string> = {};
       for (const p of activePlayers) playerNames[p.uid] = p.name;
 
-      const guesserIdx = 0; // round 1 guesser = playerOrder[0]
+      const guesserIdx = 0;
       const guesserId = playerOrder[guesserIdx];
       const nonGuessers = playerOrder.filter((uid) => uid !== guesserId);
       const secretNumber = Math.floor(Math.random() * maxNumber) + 1;
       const cats = pickCategories(nonGuessers.length);
       const assignments: Record<string, WavelengthFSAssignment> = {};
       nonGuessers.forEach((uid, i) => {
-        assignments[uid] = { categoryName: cats[i].name, categoryHint: cats[i].hint };
+        assignments[uid] = { categoryName: cats[i].name, categoryLabel: cats[i].label, categoryHint: cats[i].hint };
       });
 
       const initialState: WavelengthFSState = {
@@ -118,6 +120,7 @@ export default function WavelengthSetup() {
         round: 1,
         totalRounds,
         totalTurns: totalRounds * playerOrder.length,
+        categoryStyle,
         guesserId,
         secretNumber,
         range: maxNumber,
@@ -144,40 +147,35 @@ export default function WavelengthSetup() {
       setBusy(false);
 
       showThen(
-        { icon: "📡", title: "Wavelength", accentColor: ACCENT },
+        { icon: "📡", IconComponent: WavelengthIcon, title: "Wavelength", accentColor: ACCENT },
         () => router.push("/games/wavelength/online")
       );
       return;
     }
 
-    // ── Offline mode: local store ─────────────────────────────────────────
     reset();
     const players: Player[] = roster
       .filter((p) => selectedIds.has(p.id))
       .map((p) => ({ id: p.id, name: p.name }));
-    startGame({ players, maxNumber, totalRounds });
+    startGame({ players, maxNumber, totalRounds, categoryStyle });
     if (mode === "online" && sessionCode) {
       try { await setSessionCurrentGame(sessionCode, "wavelength"); } catch (_) {}
     }
     showThen(
-      { icon: "📡", title: "Wavelength", accentColor: ACCENT },
+      { icon: "📡", IconComponent: WavelengthIcon, title: "Wavelength", accentColor: ACCENT },
       () => router.push("/games/wavelength/round")
     );
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Pressable style={styles.back} onPress={() => router.back()}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-
         <View style={styles.hero}>
-          <Text style={styles.icon}>📡</Text>
+          <WavelengthIcon size={64} />
           <Text style={[styles.title, { color: ACCENT }]}>Wavelength</Text>
           <Text style={styles.tagline}>
             Everyone gets a number.{"\n"}Can the Guesser figure it out?
@@ -216,14 +214,42 @@ export default function WavelengthSetup() {
           </View>
         </Section>
 
-        {/* Sitting-out exclusion */}
+        <Section label="Category style">
+          <View style={styles.segmentRow}>
+            {(["simple", "specific"] as const).map((s) => {
+              const sel = categoryStyle === s;
+              return (
+                <Pressable
+                  key={s}
+                  style={[styles.segmentBtn, sel && { borderColor: ACCENT, backgroundColor: ACCENT + "22" }]}
+                  onPress={() => setCategoryStyle(s)}
+                >
+                  <Text style={styles.segmentIcon}>{s === "specific" ? "🎯" : "📋"}</Text>
+                  <Text style={[styles.segmentLabel, sel && { color: ACCENT }]}>
+                    {s === "specific" ? "Specific" : "Simple"}
+                  </Text>
+                  <Text style={styles.segmentDesc}>
+                    {s === "specific" ? '"Movies based on\nintensity"' : '"Movies"'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Section>
+
         <Pressable
           style={styles.exclusionToggle}
           onPress={() => setShowExclusion((v) => !v)}
         >
-          <Text style={styles.exclusionToggleText}>
-            {showExclusion ? "▾" : "▸"} Sitting out? ({selectedCount} of {displayList.length} playing)
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <ChevronDownIcon
+              size={16}
+              style={showExclusion ? undefined : { transform: [{ rotate: "-90deg" }] }}
+            />
+            <Text style={styles.exclusionToggleText}>
+              Sitting out? ({selectedCount} of {displayList.length} playing)
+            </Text>
+          </View>
         </Pressable>
 
         {showExclusion && displayList.length > 0 && (
@@ -242,7 +268,7 @@ export default function WavelengthSetup() {
                       selected && { backgroundColor: ACCENT, borderColor: ACCENT },
                     ]}
                   >
-                    {selected && <Text style={styles.checkboxMark}>✓</Text>}
+                    {selected && <CheckIcon size={14} color="white" />}
                   </View>
                   <Text style={styles.rosterName}>{p.name}</Text>
                 </Pressable>
@@ -256,16 +282,17 @@ export default function WavelengthSetup() {
           </View>
         )}
 
-        <Button
-          label="Start Game"
+        <GameButton
+          label={busy ? "Starting…" : "Start Game"}
           onPress={handleStart}
-          accentColor={ACCENT}
+          color={ACCENT}
+          textColor={GAME_THEME.text}
           fullWidth
-          disabled={!canStart}
-          loading={busy}
+          disabled={!canStart || busy}
           style={styles.startBtn}
         />
       </ScrollView>
+      <BackButton onPress={() => router.back()} color={GAME_THEME.accent} />
       {overlay}
     </SafeAreaView>
   );
@@ -329,6 +356,7 @@ const stepperStyles = StyleSheet.create({
     borderColor: palette.border,
     alignItems: "center",
     justifyContent: "center",
+    ...shadows.sm,
   },
   btnDisabled: { opacity: 0.35 },
   btnText: { ...typography.heading2, color: palette.white },
@@ -342,12 +370,11 @@ const stepperStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   back: { marginBottom: spacing.lg },
   backText: { ...typography.bodyBold, color: palette.muted },
   hero: { alignItems: "center", marginBottom: spacing.xxl },
-  icon: { fontSize: 64, marginBottom: spacing.md },
   title: { ...typography.display, marginBottom: spacing.sm },
   tagline: {
     ...typography.body,
@@ -364,6 +391,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
     padding: spacing.md,
+    ...shadows.sm,
   },
   rangeLabel: { flex: 1, gap: 4 },
   rangeLabelText: { ...typography.heading3, color: palette.white },
@@ -380,6 +408,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: palette.border,
     padding: spacing.md,
+    ...shadows.sm,
   },
   checkbox: {
     width: 24,
@@ -390,8 +419,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkboxMark: { color: palette.white, fontSize: 14, fontWeight: "700" },
   rosterName: { ...typography.bodyBold, color: palette.white, flex: 1 },
   warningText: { ...typography.caption, color: palette.danger, marginTop: spacing.sm },
   startBtn: { marginTop: spacing.sm },
+  segmentRow: { flexDirection: "row", gap: spacing.sm },
+  segmentBtn: {
+    flex: 1,
+    backgroundColor: palette.bgCard,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: palette.border,
+    padding: spacing.md,
+    alignItems: "center",
+    gap: 4,
+    ...shadows.sm,
+  },
+  segmentIcon: { fontSize: 20 },
+  segmentLabel: { ...typography.bodyBold, color: palette.muted, textAlign: "center" },
+  segmentDesc: { ...typography.caption, color: palette.muted, textAlign: "center", lineHeight: 16 },
 });

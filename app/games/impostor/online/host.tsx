@@ -19,6 +19,7 @@ import {
   type RoomData,
 } from "../../../../src/firebase/rooms";
 import type { ImpostorCategory } from "../../../../src/games/impostor/types";
+import { ArrowLeftIcon } from "../../../../src/assets/icons/ArrowLeftIcon";
 
 const ACCENT = palette.impostor;
 
@@ -91,7 +92,10 @@ export default function HostScreen() {
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.container}>
           <Pressable style={styles.back} onPress={() => router.back()}>
-            <Text style={styles.backText}>‹ Back</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <ArrowLeftIcon size={18} />
+              <Text style={styles.backText}>Back</Text>
+            </View>
           </Pressable>
 
           <Text style={styles.title}>Host a Game</Text>

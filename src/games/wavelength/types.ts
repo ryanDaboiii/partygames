@@ -15,6 +15,8 @@ export interface CurrentRound {
   secretNumber: number;
   playerCategories: PlayerCategory[];
   categorySwitches: Record<string, number>; // keyed by player.id, counts switches used this round
+  usedCategoryIds: string[];
+  extraClueUsedCategoryIds: string[];
 }
 
 export interface RoundResult {
@@ -30,6 +32,7 @@ export interface WavelengthSetup {
   players: Player[];
   maxNumber: number;
   totalRounds: number;
+  categoryStyle: "specific" | "simple";
 }
 
 export type GamePhase = "setup" | "playing" | "game-over";

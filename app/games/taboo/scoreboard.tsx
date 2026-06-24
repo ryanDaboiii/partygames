@@ -1,22 +1,36 @@
-import React from "react";
+import React, { useEffect } from "react";
 import {
   View,
   Text,
   ScrollView,
   StyleSheet,
   SafeAreaView,
+  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Button } from "../../../src/components/Button";
-import { palette, spacing, typography } from "../../../src/theme";
+import { GameButton } from "../../../src/components/GameButton";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useTabooStore } from "../../../src/games/taboo/store";
 import { useSessionStore } from "../../../src/store/session";
 import { clearSessionCurrentGame } from "../../../src/firebase/sessions";
+import { getGameTheme } from "../../../src/games/registry";
+import { HandshakeIcon } from "../../../src/assets/icons/HandshakeIcon";
+import { TrophyIcon } from "../../../src/assets/icons/TrophyIcon";
+import { MedalIcon } from "../../../src/assets/icons/MedalIcon";
+import { CheckIcon } from "../../../src/assets/icons/CheckIcon";
+import { SkipIcon } from "../../../src/assets/icons/SkipIcon";
+import { BanIcon } from "../../../src/assets/icons/BanIcon";
+import ConfettiCannon from "react-native-confetti-cannon";
+import { BackButton } from "../../../src/components/BackButton";
+import { playSfx } from "../../../src/hooks/useSoundEffects";
 
-const ACCENT = palette.taboo;
+const GAME_THEME = getGameTheme("taboo");
+const ACCENT = GAME_THEME.accent;
+const { width: screenWidth } = Dimensions.get("window");
 
 export default function TabooScoreboardScreen() {
   const router = useRouter();
+  const hasNavigated = React.useRef(false);
   const players = useTabooStore((s) => s.players);
   const gamePoints = useTabooStore((s) => s.gamePoints);
   const turnHistory = useTabooStore((s) => s.turnHistory);
@@ -29,13 +43,13 @@ export default function TabooScoreboardScreen() {
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const scoringMode = useSessionStore((s) => s.scoringMode);
 
-  // Sort players by gamePoints descending
+  useEffect(() => { playSfx("fanfare"); }, []);
+
   const ranked = [...players].sort((a, b) => (gamePoints[b] ?? 0) - (gamePoints[a] ?? 0));
   const topScore = ranked.length > 0 ? (gamePoints[ranked[0]] ?? 0) : 0;
   const winners = ranked.filter((n) => (gamePoints[n] ?? 0) === topScore);
   const isTie = winners.length !== 1;
 
-  // Per-player stats from history
   const playerStats: Record<string, { correct: number; passed: number; taboos: number }> = {};
   for (const p of players) playerStats[p] = { correct: 0, passed: 0, taboos: 0 };
   for (const turn of turnHistory) {
@@ -53,19 +67,24 @@ export default function TabooScoreboardScreen() {
   };
 
   const handleBackToHub = async () => {
+    if (hasNavigated.current) return;
+    hasNavigated.current = true;
+    router.replace("/hub");
     reset();
     if (mode === "online" && sessionCode) {
       try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
     }
-    router.replace("/hub");
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>
-          {isTie ? "🤝 It's a Tie!" : `🏆 ${winners[0]} Wins!`}
-        </Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 }}>
+          {isTie ? <HandshakeIcon size={36} /> : <TrophyIcon size={36} />}
+          <Text style={styles.title}>
+            {isTie ? "It's a Tie!" : `${winners[0]} Wins!`}
+          </Text>
+        </View>
 
         {/* Rankings */}
         <View style={styles.rankList}>
@@ -73,21 +92,23 @@ export default function TabooScoreboardScreen() {
             const isWinner = winners.includes(name);
             const pts = gamePoints[name] ?? 0;
             const stats = playerStats[name];
-            const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `${idx + 1}.`;
+            const medalEl = idx === 0 ? <MedalIcon rank={1} size={28} /> : idx === 1 ? <MedalIcon rank={2} size={28} /> : idx === 2 ? <MedalIcon rank={3} size={28} /> : null;
 
             return (
               <View
                 key={name}
                 style={[styles.rankRow, isWinner && styles.rankRowWinner]}
               >
-                <Text style={styles.medal}>{medal}</Text>
+                <View style={{ width: 36, alignItems: "center", justifyContent: "center" }}>
+                  {medalEl ?? <Text style={styles.medal}>{idx + 1}.</Text>}
+                </View>
                 <View style={styles.rankInfo}>
                   <Text style={[styles.rankName, isWinner && { color: ACCENT }]}>{name}</Text>
                   {stats && (
                     <View style={styles.statRow}>
-                      <StatBit label="✓" value={stats.correct} color={palette.success} />
-                      <StatBit label="⏭" value={stats.passed} color={palette.muted} />
-                      <StatBit label="🚫" value={stats.taboos} color={palette.danger} />
+                      <StatBit label={<CheckIcon size={14} />} value={stats.correct} color={palette.success} />
+                      <StatBit label={<SkipIcon size={14} />} value={stats.passed} color={palette.muted} />
+                      <StatBit label={<BanIcon size={14} />} value={stats.taboos} color={palette.danger} />
                     </View>
                   )}
                 </View>
@@ -98,30 +119,40 @@ export default function TabooScoreboardScreen() {
         </View>
 
         <View style={styles.actions}>
-          <Button
+          <GameButton
             label="Play Again"
             onPress={handlePlayAgain}
-            accentColor={ACCENT}
+            color={ACCENT}
+            textColor={GAME_THEME.text}
             fullWidth
           />
-          <Button
+          <GameButton
             label="Back to Hub"
             onPress={handleBackToHub}
-            variant="ghost"
-            accentColor={palette.muted}
+            color={palette.bgCard}
+            textColor={palette.muted}
             fullWidth
           />
         </View>
       </ScrollView>
+
+      <BackButton onPress={handleBackToHub} color={GAME_THEME.accent} />
+      <ConfettiCannon
+        count={120}
+        origin={{ x: screenWidth / 2, y: -20 }}
+        autoStart={true}
+        fadeOut={true}
+        colors={["#69F0AE", "#9EFFC8", "#FFFFFF", "#111111"]}
+      />
     </SafeAreaView>
   );
 }
 
-function StatBit({ label, value, color }: { label: string; value: number; color: string }) {
+function StatBit({ label, value, color }: { label: React.ReactNode; value: number; color: string }) {
   return (
     <View style={statStyles.container}>
       <Text style={[statStyles.value, { color }]}>{value}</Text>
-      <Text style={statStyles.label}>{label}</Text>
+      <View style={statStyles.labelWrap}>{label}</View>
     </View>
   );
 }
@@ -129,11 +160,11 @@ function StatBit({ label, value, color }: { label: string; value: number; color:
 const statStyles = StyleSheet.create({
   container: { alignItems: "center", minWidth: 32 },
   value: { ...typography.bodyBold, color: palette.white },
-  label: { fontSize: 10, color: palette.muted, marginTop: 1 },
+  labelWrap: { marginTop: 2 },
 });
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.lg },
 
   title: { ...typography.display, color: palette.white, textAlign: "center" },
@@ -149,10 +180,11 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
+    ...shadows.sm,
   },
   rankRowWinner: {
     borderColor: ACCENT,
-    backgroundColor: ACCENT + "11",
+    backgroundColor: GAME_THEME.accentMuted,
     borderWidth: 1.5,
   },
   medal: { fontSize: 24, width: 36, textAlign: "center" },

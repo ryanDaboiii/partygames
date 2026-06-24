@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,19 +6,30 @@ import {
   StyleSheet,
   SafeAreaView,
   Pressable,
+  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Button } from "../../../src/components/Button";
-import { palette, spacing, typography } from "../../../src/theme";
+import { GameButton } from "../../../src/components/GameButton";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import {
   useImpostorStore,
   computeResults,
 } from "../../../src/games/impostor/gameStore";
 import { usePlayerStore } from "../../../src/store/players";
 import { useSessionStore } from "../../../src/store/session";
+import { getGameTheme } from "../../../src/games/registry";
+import { HandshakeIcon } from "../../../src/assets/icons/HandshakeIcon";
+import { CrewmateIcon } from "../../../src/assets/icons/CrewmateIcon";
+import { ImpostorIcon } from "../../../src/assets/icons/ImpostorIcon";
+import { TrophyIcon } from "../../../src/assets/icons/TrophyIcon";
+import ConfettiCannon from "react-native-confetti-cannon";
+import { BackButton } from "../../../src/components/BackButton";
+import { playSfx } from "../../../src/hooks/useSoundEffects";
 
-const ACCENT = palette.impostor;
+const GAME_THEME = getGameTheme("impostor");
+const ACCENT = GAME_THEME.accent;
 const POINTS_PER_WIN = 1;
+const { width: screenWidth } = Dimensions.get("window");
 
 export default function ResultsScreen() {
   const router = useRouter();
@@ -29,6 +40,10 @@ export default function ResultsScreen() {
   const addPoints = usePlayerStore((s) => s.addPoints);
 
   const [winnerSelection, setWinnerSelection] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isTie) playSfx(crewmatesWin ? "fanfare" : "wrong");
+  }, []);
 
   const { tally, impostors, isTie, eliminatedIds, crewmatesWin } =
     computeResults(assignments, votes);
@@ -69,7 +84,7 @@ export default function ResultsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ScrollView contentContainerStyle={styles.container}>
         {/* Outcome banner */}
         <View
@@ -80,18 +95,22 @@ export default function ResultsScreen() {
                 ? palette.warning + "22"
                 : crewmatesWin
                 ? palette.success + "22"
-                : palette.impostor + "22",
+                : ACCENT + "22",
               borderColor: isTie
                 ? palette.warning
                 : crewmatesWin
                 ? palette.success
-                : palette.impostor,
+                : ACCENT,
             },
           ]}
         >
-          <Text style={styles.outcomeEmoji}>
-            {isTie ? "🤝" : crewmatesWin ? "🎉" : "🕵️"}
-          </Text>
+          {isTie ? (
+            <HandshakeIcon size={52} />
+          ) : crewmatesWin ? (
+            <CrewmateIcon size={64} />
+          ) : (
+            <ImpostorIcon size={52} />
+          )}
           <Text
             style={[
               styles.outcomeTitle,
@@ -100,7 +119,7 @@ export default function ResultsScreen() {
                   ? palette.warning
                   : crewmatesWin
                   ? palette.success
-                  : palette.impostor,
+                  : ACCENT,
               },
             ]}
           >
@@ -132,7 +151,7 @@ export default function ResultsScreen() {
           </Text>
           {impostors.map((p) => (
             <View key={p.id} style={[styles.playerRow, { borderColor: ACCENT }]}>
-              <Text style={styles.impostorBadge}>🕵️</Text>
+              <ImpostorIcon size={24} />
               <Text style={[styles.playerName, { color: ACCENT }]}>{p.name}</Text>
             </View>
           ))}
@@ -174,7 +193,10 @@ export default function ResultsScreen() {
           <Text style={styles.sectionLabel}>Who won this round?</Text>
           {winnerSelection ? (
             <View style={styles.winnerBadge}>
-              <Text style={styles.winnerBadgeText}>🏆 {winnerSelection} wins the round!</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <TrophyIcon size={24} />
+                <Text style={styles.winnerBadgeText}>{winnerSelection} wins the round!</Text>
+              </View>
             </View>
           ) : (
             <>
@@ -187,7 +209,7 @@ export default function ResultsScreen() {
                   ]}
                   onPress={handleAwardCrewmates}
                 >
-                  <Text style={styles.teamBtnEmoji}>🎉</Text>
+                  <CrewmateIcon size={32} />
                   <Text style={[styles.teamBtnText, { color: palette.success }]}>Crewmates</Text>
                 </Pressable>
                 <Pressable
@@ -198,7 +220,7 @@ export default function ResultsScreen() {
                   ]}
                   onPress={handleAwardImpostors}
                 >
-                  <Text style={styles.teamBtnEmoji}>🕵️</Text>
+                  <ImpostorIcon size={32} />
                   <Text style={[styles.teamBtnText, { color: ACCENT }]}>Impostors</Text>
                 </Pressable>
               </View>
@@ -226,34 +248,38 @@ export default function ResultsScreen() {
         </View>
 
         <View style={styles.actions}>
-          <Button
-            label="Play Again"
-            onPress={handlePlayAgain}
-            accentColor={ACCENT}
-            fullWidth
-          />
-          <Button
+          <GameButton label="Play Again" onPress={handlePlayAgain} color={ACCENT} textColor={GAME_THEME.text} fullWidth />
+          <GameButton
             label="View Standings"
             onPress={handleViewStandings}
-            variant="secondary"
-            accentColor={ACCENT}
+            color={palette.bgCard}
+            textColor={palette.muted}
             fullWidth
           />
-          <Button
+          <GameButton
             label="Back to Hub"
             onPress={handleHome}
-            variant="ghost"
-            accentColor={ACCENT}
+            color={palette.bgCard}
+            textColor={palette.muted}
             fullWidth
           />
         </View>
       </ScrollView>
+
+      <BackButton onPress={handleHome} />
+      <ConfettiCannon
+        count={120}
+        origin={{ x: screenWidth / 2, y: -20 }}
+        autoStart={true}
+        fadeOut={true}
+        colors={["#FF2D78", "#FF6FA3", "#FFFFFF", "#FFB3CC"]}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.xl },
   outcomeBanner: {
     borderRadius: 20,
@@ -261,8 +287,8 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     alignItems: "center",
     gap: spacing.sm,
+    ...shadows.md,
   },
-  outcomeEmoji: { fontSize: 52 },
   outcomeTitle: { ...typography.heading1 },
   outcomeDesc: { ...typography.body, color: palette.muted, textAlign: "center" },
   wordReveal: {
@@ -273,6 +299,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     alignItems: "center",
     gap: spacing.sm,
+    ...shadows.md,
   },
   wordLabel: { ...typography.label, color: palette.muted },
   word: { ...typography.display, color: palette.white },
@@ -286,8 +313,8 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1.5,
     padding: spacing.md,
+    ...shadows.sm,
   },
-  impostorBadge: { fontSize: 24 },
   playerName: { ...typography.heading3 },
   tallyRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
   tallyName: { ...typography.body, color: palette.white, width: 110 },
@@ -302,7 +329,6 @@ const styles = StyleSheet.create({
   tallyBar: { height: 8, borderRadius: 4 },
   tallyCount: { ...typography.bodyBold, color: palette.muted, width: 20, textAlign: "right" },
 
-  // Winner picker
   teamBtnRow: { flexDirection: "row", gap: spacing.md },
   teamBtn: {
     flex: 1,
@@ -312,8 +338,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     alignItems: "center",
     gap: spacing.sm,
+    ...shadows.sm,
   },
-  teamBtnEmoji: { fontSize: 32 },
   teamBtnText: { ...typography.heading3 },
   specificImpostorSection: { gap: spacing.sm },
   specificLabel: { ...typography.caption, color: palette.muted },
@@ -325,6 +351,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
+    ...shadows.sm,
   },
   winnerBtnPressed: { borderColor: palette.warning, backgroundColor: palette.warning + "22" },
   winnerBtnText: { ...typography.bodyBold, color: palette.white },
@@ -335,6 +362,7 @@ const styles = StyleSheet.create({
     borderColor: palette.warning,
     padding: spacing.md,
     alignItems: "center",
+    ...shadows.sm,
   },
   winnerBadgeText: { ...typography.bodyBold, color: palette.warning },
 

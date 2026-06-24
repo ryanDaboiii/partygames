@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { BackButton } from "../../../src/components/BackButton";
+import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
 import {
   View,
   Text,
@@ -7,11 +9,16 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { HoldToReveal } from "../../../src/components/HoldToReveal";
-import { Button } from "../../../src/components/Button";
-import { palette, spacing, typography } from "../../../src/theme";
+import { GameButton } from "../../../src/components/GameButton";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useImpostorStore } from "../../../src/games/impostor/gameStore";
+import { getGameTheme } from "../../../src/games/registry";
+import { CheckIcon } from "../../../src/assets/icons/CheckIcon";
+import { CrewmateIcon } from "../../../src/assets/icons/CrewmateIcon";
+import { ImpostorIcon } from "../../../src/assets/icons/ImpostorIcon";
 
-const ACCENT = palette.impostor;
+const GAME_THEME = getGameTheme("impostor");
+const ACCENT = GAME_THEME.accent;
 
 export default function RevealScreen() {
   const router = useRouter();
@@ -19,9 +26,10 @@ export default function RevealScreen() {
   const revealIndex = useImpostorStore((s) => s.revealIndex);
   const advanceReveal = useImpostorStore((s) => s.advanceReveal);
   const startDiscussion = useImpostorStore((s) => s.startDiscussion);
+  const reset = useImpostorStore((s) => s.reset);
 
-  // true once the player has revealed AND hidden the card
   const [readyToPass, setReadyToPass] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
 
   const isLast = revealIndex === assignments.length - 1;
   const current = assignments[revealIndex];
@@ -41,8 +49,16 @@ export default function RevealScreen() {
     }
   };
 
+  const handleExitKeep = () => { reset(); router.replace('/hub'); };
+
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
+      <ExitGameDialog
+        visible={showExitDialog}
+        onKeepScores={handleExitKeep}
+        onVoidPoints={handleExitKeep}
+        onCancel={() => setShowExitDialog(false)}
+      />
       <View style={styles.container}>
         {/* Progress dots */}
         <View style={styles.dots}>
@@ -59,9 +75,8 @@ export default function RevealScreen() {
         </View>
 
         {readyToPass ? (
-          // — Phase 2: word is hidden, safe to pass —
           <View style={styles.passPhase}>
-            <Text style={styles.checkmark}>✓</Text>
+            <CheckIcon size={64} />
             <Text style={styles.passTitle}>Word hidden</Text>
             <Text style={styles.passBody}>
               {isLast
@@ -71,20 +86,20 @@ export default function RevealScreen() {
                 <Text style={{ color: ACCENT }}>{next?.player.name}</Text>
               )}
             </Text>
-            <Button
+            <GameButton
               label={
                 isLast
                   ? "Start Discussion"
                   : `Pass to ${next?.player.name ?? ""} →`
               }
               onPress={handleNext}
-              accentColor={ACCENT}
+              color={ACCENT}
+              textColor={GAME_THEME.text}
               fullWidth
               style={styles.passBtn}
             />
           </View>
         ) : (
-          // — Phase 1: current player reveals their word —
           <>
             <View style={styles.header}>
               <Text style={styles.playerName}>
@@ -99,7 +114,7 @@ export default function RevealScreen() {
             <View style={styles.cardArea}>
               <HoldToReveal
                 accentColor={ACCENT}
-                onReveal={() => {/* word now visible */}}
+                onReveal={() => {}}
                 onHide={() => setReadyToPass(true)}
               >
                 {isImpostor ? <ImpostorCard /> : <CrewmateCard word={current.word!} />}
@@ -112,6 +127,7 @@ export default function RevealScreen() {
           </>
         )}
       </View>
+      <BackButton onPress={() => setShowExitDialog(true)} />
     </SafeAreaView>
   );
 }
@@ -120,7 +136,10 @@ function CrewmateCard({ word }: { word: string }) {
   return (
     <View style={revealStyles.content}>
       <Text style={revealStyles.roleLabel}>You are a</Text>
-      <Text style={revealStyles.role}>Crewmate 👥</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Text style={revealStyles.role}>Crewmate</Text>
+        <CrewmateIcon size={28} />
+      </View>
       <View style={revealStyles.divider} />
       <Text style={revealStyles.wordLabel}>Secret word</Text>
       <Text style={revealStyles.word}>{word}</Text>
@@ -135,7 +154,10 @@ function ImpostorCard() {
   return (
     <View style={revealStyles.content}>
       <Text style={revealStyles.roleLabel}>You are the</Text>
-      <Text style={[revealStyles.role, { color: palette.impostor }]}>Impostor 🕵️</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Text style={[revealStyles.role, { color: ACCENT }]}>Impostor</Text>
+        <ImpostorIcon size={28} />
+      </View>
       <View style={revealStyles.divider} />
       <Text style={revealStyles.tip}>
         You have NO word. Listen to others' clues and bluff your way through!
@@ -145,17 +167,27 @@ function ImpostorCard() {
 }
 
 const revealStyles = StyleSheet.create({
-  content: { alignItems: "center", gap: spacing.sm, paddingVertical: spacing.md },
-  roleLabel: { ...typography.caption, color: palette.muted },
-  role: { ...typography.heading1, color: palette.white },
-  divider: { height: 1, backgroundColor: palette.border, width: "60%", marginVertical: spacing.sm },
-  wordLabel: { ...typography.label, color: palette.muted },
-  word: { ...typography.display, color: palette.white },
-  tip: { ...typography.caption, color: palette.muted, textAlign: "center", marginTop: spacing.sm },
+  content: {
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.xl,
+    paddingHorizontal: spacing.xl,
+    backgroundColor: GAME_THEME.accentMuted,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: ACCENT,
+    width: "100%",
+  },
+  roleLabel: { ...typography.caption, color: GAME_THEME.textMuted },
+  role: { ...typography.heading1, color: GAME_THEME.accentLight },
+  divider: { height: 1, backgroundColor: ACCENT + "44", width: "60%", marginVertical: spacing.sm },
+  wordLabel: { ...typography.label, color: GAME_THEME.textMuted },
+  word: { ...typography.display, color: palette.white, textAlign: "center" },
+  tip: { ...typography.caption, color: GAME_THEME.textMuted, textAlign: "center", marginTop: spacing.sm },
 });
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   container: { flex: 1, padding: spacing.lg },
   dots: {
     flexDirection: "row",
@@ -166,7 +198,6 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.border },
   dotDone: { backgroundColor: palette.success },
 
-  // Phase 1
   header: { marginBottom: spacing.xl, alignItems: "center" },
   playerName: { ...typography.heading2, color: palette.white, textAlign: "center" },
   playerHint: {
@@ -183,17 +214,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
 
-  // Phase 2
   passPhase: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     gap: spacing.lg,
     paddingHorizontal: spacing.md,
-  },
-  checkmark: {
-    fontSize: 64,
-    color: palette.success,
   },
   passTitle: { ...typography.heading1, color: palette.white },
   passBody: { ...typography.body, color: palette.muted, textAlign: "center" },

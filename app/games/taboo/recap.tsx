@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -7,11 +7,21 @@ import {
   SafeAreaView,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Button } from "../../../src/components/Button";
-import { palette, spacing, typography, scaleFont } from "../../../src/theme";
+import { GameButton } from "../../../src/components/GameButton";
+import { BackButton } from "../../../src/components/BackButton";
+import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
+import { palette, spacing, typography, scaleFont, shadows } from "../../../src/theme";
 import { useTabooStore, getCurrentCluegiver } from "../../../src/games/taboo/store";
+import { usePlayerStore } from "../../../src/store/players";
+import { useSessionStore } from "../../../src/store/session";
+import { clearSessionCurrentGame } from "../../../src/firebase/sessions";
+import { getGameTheme } from "../../../src/games/registry";
+import { CheckIcon } from "../../../src/assets/icons/CheckIcon";
+import { BanIcon } from "../../../src/assets/icons/BanIcon";
+import { SkipIcon } from "../../../src/assets/icons/SkipIcon";
 
-const ACCENT = palette.taboo;
+const GAME_THEME = getGameTheme("taboo");
+const ACCENT = GAME_THEME.accent;
 
 export default function RecapScreen() {
   const router = useRouter();
@@ -23,12 +33,40 @@ export default function RecapScreen() {
   const nextTurn = useTabooStore((s) => s.nextTurn);
   const totalTurnsPlayed = useTabooStore((s) => s.totalTurnsPlayed);
   const totalTurnsMax = useTabooStore((s) => s.totalTurnsMax);
+  const reset = useTabooStore((s) => s.reset);
+  const localPlayers = usePlayerStore((s) => s.players);
+  const addPoints = usePlayerStore((s) => s.addPoints);
+  const mode = useSessionStore((s) => s.mode);
+  const sessionCode = useSessionStore((s) => s.sessionCode);
+  const isHost = useSessionStore((s) => s.isHost);
+  const [showExitDialog, setShowExitDialog] = useState(false);
 
   useEffect(() => {
     if (phase === "turn-start") router.replace("/games/taboo/turn-start");
     if (phase === "game-over") router.replace("/games/taboo/scoreboard");
     if (phase === "setup") router.replace("/games/taboo");
   }, [phase]);
+
+  const handleExitKeep = async () => {
+    if (mode === "online" && isHost && sessionCode) {
+      try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
+    }
+    reset();
+    router.replace('/hub');
+  };
+  const handleExitVoid = async () => {
+    Object.entries(gamePoints).forEach(([name, pts]) => {
+      if (pts > 0) {
+        const match = localPlayers.find((p) => p.name.toLowerCase() === name.toLowerCase());
+        if (match) addPoints(match.id, -pts);
+      }
+    });
+    if (mode === "online" && isHost && sessionCode) {
+      try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
+    }
+    reset();
+    router.replace('/hub');
+  };
 
   const lastTurn = turnHistory[turnHistory.length - 1];
   const turnsRemaining = totalTurnsMax - totalTurnsPlayed - 1;
@@ -39,11 +77,16 @@ export default function RecapScreen() {
   }
 
   const cluegiver = lastTurn.cluegiver;
-  // Fix 4: passes don't subtract — only taboos do
   const turnNetPoints = Math.max(0, lastTurn.correct - lastTurn.taboos);
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
+      <ExitGameDialog
+        visible={showExitDialog}
+        onKeepScores={handleExitKeep}
+        onVoidPoints={handleExitVoid}
+        onCancel={() => setShowExitDialog(false)}
+      />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <Text style={styles.heading}>Turn Over!</Text>
         <Text style={styles.subheading}>{cluegiver}'s turn</Text>
@@ -59,19 +102,19 @@ export default function RecapScreen() {
         {/* Breakdown */}
         <View style={styles.breakdownCard}>
           <StatRow
-            label="✅ Correct"
+            label={<View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><CheckIcon size={16} /><Text style={statStyles.label}>Correct</Text></View>}
             value={lastTurn.correct}
             contribution={`+${lastTurn.correct}`}
-            color={palette.success}
+            color={ACCENT}
           />
           <StatRow
-            label="🚫 Taboo"
+            label={<View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><BanIcon size={16} /><Text style={statStyles.label}>Taboo</Text></View>}
             value={lastTurn.taboos}
             contribution={lastTurn.taboos > 0 ? `-${lastTurn.taboos}` : "0"}
             color={palette.danger}
           />
           <StatRow
-            label="⏭ Passed"
+            label={<View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><SkipIcon size={16} /><Text style={statStyles.label}>Passed</Text></View>}
             value={lastTurn.passed}
             contribution="0"
             color={palette.muted}
@@ -111,14 +154,16 @@ export default function RecapScreen() {
           </Text>
         )}
 
-        <Button
+        <GameButton
           label={turnsRemaining <= 0 ? "See Final Scores" : "Next Turn →"}
           onPress={nextTurn}
-          accentColor={ACCENT}
+          color={ACCENT}
+          textColor={GAME_THEME.text}
           fullWidth
           style={styles.nextBtn}
         />
       </ScrollView>
+      <BackButton onPress={() => setShowExitDialog(true)} color={GAME_THEME.accent} />
     </SafeAreaView>
   );
 }
@@ -129,14 +174,14 @@ function StatRow({
   contribution,
   color,
 }: {
-  label: string;
+  label: React.ReactNode;
   value: number;
   contribution: string;
   color: string;
 }) {
   return (
     <View style={statStyles.row}>
-      <Text style={statStyles.label}>{label}</Text>
+      <View style={{ flex: 1 }}>{label}</View>
       <View style={statStyles.right}>
         <Text style={[statStyles.value, { color }]}>{value}</Text>
         <Text style={[statStyles.contribution, { color }]}>({contribution})</Text>
@@ -159,7 +204,7 @@ const statStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   container: {
     padding: spacing.lg,
     paddingBottom: spacing.xxxl,
@@ -177,6 +222,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     alignItems: "center",
     gap: spacing.sm,
+    ...shadows.md,
   },
   pointsLabel: { ...typography.label, color: ACCENT },
   pointsValue: { fontSize: scaleFont(64), fontWeight: "900", color: ACCENT },
@@ -188,6 +234,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+    ...shadows.sm,
   },
   breakdownDivider: {
     height: 1,
@@ -208,6 +255,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    ...shadows.sm,
   },
   scoreRowActive: {
     borderColor: ACCENT,

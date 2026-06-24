@@ -16,10 +16,13 @@ interface WavelengthStore {
   roundNumber: number;
   currentRound: CurrentRound | null;
   history: RoundResult[];
+  categoryStyle: "specific" | "simple";
+  pointsAwardedThisGame: Record<string, number>;
 
   startGame: (setup: WavelengthSetup) => void;
   startRound: (guesserIndex: number) => void;
   switchCategory: (playerIndex: number) => void;
+  recordExtraClueCategory: (id: string) => void;
   submitResult: (correct: boolean) => void;
   reset: () => void;
 }
@@ -33,6 +36,8 @@ const INITIAL = {
   roundNumber: 1,
   currentRound: null as CurrentRound | null,
   history: [] as RoundResult[],
+  categoryStyle: "simple" as "specific" | "simple",
+  pointsAwardedThisGame: {} as Record<string, number>,
 };
 
 export const useWavelengthStore = create<WavelengthStore>((set, get) => ({
@@ -44,11 +49,12 @@ export const useWavelengthStore = create<WavelengthStore>((set, get) => ({
       players: setup.players,
       maxNumber: setup.maxNumber,
       totalRounds: setup.totalRounds,
-      // Fix 7: one "round" = every player gets one guesser turn
       totalTurns: setup.totalRounds * setup.players.length,
       roundNumber: 1,
       currentRound: null,
       history: [],
+      categoryStyle: setup.categoryStyle,
+      pointsAwardedThisGame: {},
     });
   },
 
@@ -67,6 +73,19 @@ export const useWavelengthStore = create<WavelengthStore>((set, get) => ({
         secretNumber,
         playerCategories,
         categorySwitches: {},
+        usedCategoryIds: categories.map((c) => c.id),
+        extraClueUsedCategoryIds: [],
+      },
+    });
+  },
+
+  recordExtraClueCategory: (id) => {
+    const { currentRound } = get();
+    if (!currentRound) return;
+    set({
+      currentRound: {
+        ...currentRound,
+        extraClueUsedCategoryIds: [...currentRound.extraClueUsedCategoryIds, id],
       },
     });
   },
@@ -81,8 +100,8 @@ export const useWavelengthStore = create<WavelengthStore>((set, get) => ({
     if (used >= MAX_SWITCHES_PER_ROUND) return;
 
     // Pick a replacement not already assigned to any player this round
-    const assignedNames = new Set(playerCategories.map((p) => p.category.name));
-    const available = CATEGORIES.filter((c) => !assignedNames.has(c.name));
+    const assignedIds = new Set(playerCategories.map((p) => p.category.id));
+    const available = CATEGORIES.filter((c) => !assignedIds.has(c.id));
     if (available.length === 0) return;
     const newCat = available[Math.floor(Math.random() * available.length)];
 
@@ -101,7 +120,7 @@ export const useWavelengthStore = create<WavelengthStore>((set, get) => ({
   },
 
   submitResult: (correct) => {
-    const { currentRound, players, roundNumber, totalTurns, history } = get();
+    const { currentRound, players, roundNumber, totalTurns, history, pointsAwardedThisGame } = get();
     if (!currentRound) return;
 
     const { guesserIndex, secretNumber, playerCategories } = currentRound;
@@ -110,10 +129,15 @@ export const useWavelengthStore = create<WavelengthStore>((set, get) => ({
 
     const addPoints = usePlayerStore.getState().addPoints;
     const guesser = players[guesserIndex];
-    if (guesserScore > 0) addPoints(guesser.id, guesserScore);
+    const updatedPointsAwarded = { ...pointsAwardedThisGame };
+    if (guesserScore > 0) {
+      addPoints(guesser.id, guesserScore);
+      updatedPointsAwarded[guesser.id] = (updatedPointsAwarded[guesser.id] ?? 0) + guesserScore;
+    }
     if (nonGuesserBonus > 0) {
       for (const { player } of playerCategories) {
         addPoints(player.id, nonGuesserBonus);
+        updatedPointsAwarded[player.id] = (updatedPointsAwarded[player.id] ?? 0) + nonGuesserBonus;
       }
     }
 
@@ -135,6 +159,7 @@ export const useWavelengthStore = create<WavelengthStore>((set, get) => ({
       roundNumber: nextRound,
       currentRound: null,
       phase: isOver ? "game-over" : "playing",
+      pointsAwardedThisGame: updatedPointsAwarded,
     });
   },
 

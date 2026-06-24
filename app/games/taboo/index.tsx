@@ -8,19 +8,25 @@ import {
   Pressable,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Button } from "../../../src/components/Button";
-import { palette, spacing, typography } from "../../../src/theme";
+import { GameButton } from "../../../src/components/GameButton";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useTabooStore } from "../../../src/games/taboo/store";
 import { usePlayerStore } from "../../../src/store/players";
 import { useSessionStore } from "../../../src/store/session";
 import {
   subscribeToSession,
   setSessionCurrentGame,
+  clearSessionCurrentGame,
   type SessionPlayer,
 } from "../../../src/firebase/sessions";
 import { useGameIntro } from "../../../src/components/GameIntroOverlay";
+import { TabooIcon } from "../../../src/assets/icons/TabooIcon";
+import { BanIcon } from "../../../src/assets/icons/BanIcon";
+import { BackButton } from "../../../src/components/BackButton";
+import { getGameTheme } from "../../../src/games/registry";
 
-const ACCENT = palette.taboo;
+const GAME_THEME = getGameTheme("taboo");
+const ACCENT = GAME_THEME.accent;
 const TIME_OPTIONS = [30, 45, 60, 90];
 const MIN_PLAYERS = 2;
 
@@ -38,7 +44,7 @@ function OptionChip({
       style={[styles.chip, selected && { backgroundColor: ACCENT, borderColor: ACCENT }]}
       onPress={onPress}
     >
-      <Text style={[styles.chipText, selected && { color: palette.white }]}>{label}</Text>
+      <Text style={[styles.chipText, selected && { color: palette.bg }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -75,28 +81,25 @@ export default function TabooSetupScreen() {
     reset();
     startGame({ players, roundTimeSecs, totalRounds, scoringMode });
     if (isOnline && sessionCode) {
+      try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
       try { await setSessionCurrentGame(sessionCode, "taboo"); } catch (_) {}
     }
     showThen(
-      { icon: "🚫", title: "Taboo", accentColor: ACCENT },
+      { icon: "🚫", IconComponent: TabooIcon, title: "Taboo", accentColor: ACCENT },
       () => router.replace("/games/taboo/turn-start")
     );
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Pressable style={styles.back} onPress={() => router.back()}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-
         <View style={styles.hero}>
-          <Text style={styles.icon}>🚫</Text>
+          <TabooIcon size={64} />
           <Text style={styles.title}>Taboo</Text>
           <Text style={styles.tagline}>
             Describe the word without saying{"\n"}any of the forbidden words.
@@ -168,29 +171,30 @@ export default function TabooSetupScreen() {
           </Text>
         </View>
 
-        <Button
+        <GameButton
           label="Start Game"
           onPress={handleStart}
-          accentColor={ACCENT}
+          color={ACCENT}
+          textColor={GAME_THEME.text}
           disabled={!canStart}
           fullWidth
           style={styles.startBtn}
         />
       </ScrollView>
+      <BackButton onPress={() => router.back()} color={GAME_THEME.accent} />
       {overlay}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   scroll: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   back: { marginBottom: spacing.lg },
   backText: { ...typography.bodyBold, color: palette.muted },
 
   hero: { alignItems: "center", marginVertical: spacing.xl },
-  icon: { fontSize: 64, marginBottom: spacing.md },
   title: { ...typography.display, color: palette.white, marginBottom: spacing.sm },
   tagline: {
     ...typography.body,
@@ -211,6 +215,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
+    ...shadows.sm,
   },
   playerName: { ...typography.bodyBold, color: palette.white },
   warningText: { ...typography.caption, color: palette.danger, marginTop: spacing.sm },
@@ -235,6 +240,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     alignItems: "center",
     justifyContent: "center",
+    ...shadows.sm,
   },
   stepBtnDisabled: { opacity: 0.35 },
   stepBtnText: { ...typography.heading2, color: palette.white },

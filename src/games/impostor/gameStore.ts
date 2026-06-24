@@ -12,6 +12,7 @@ import { getRandomWord } from "./words";
 interface ImpostorStore extends ImpostorGameState {
   // fixed once per game — for the "speaking order" shown on the discussion screen
   speakingOrder: Player[];
+  pointsAwardedThisGame: Record<string, number>;
 
   startGame: (setup: ImpostorSetup) => void;
   advanceReveal: () => void;
@@ -21,6 +22,7 @@ interface ImpostorStore extends ImpostorGameState {
   advanceVoting: () => void;
   reset: () => void;
   setPhase: (phase: GamePhase) => void;
+  recordPointsAwarded: (playerId: string, pts: number) => void;
 }
 
 const INITIAL_STATE: ImpostorGameState = {
@@ -59,8 +61,9 @@ function buildAssignments(setup: ImpostorSetup): { assignments: PlayerAssignment
 export const useImpostorStore = create<ImpostorStore>((set, get) => ({
   ...INITIAL_STATE,
   speakingOrder: [],
+  pointsAwardedThisGame: {} as Record<string, number>,
 
-  reset: () => set({ ...INITIAL_STATE, speakingOrder: [] }),
+  reset: () => set({ ...INITIAL_STATE, speakingOrder: [], pointsAwardedThisGame: {} }),
 
   startGame: (setup) => {
     const { assignments, secretWord } = buildAssignments(setup);
@@ -73,6 +76,7 @@ export const useImpostorStore = create<ImpostorStore>((set, get) => ({
       votingIndex: 0,
       phase: "reveal",
       speakingOrder: shufflePlayers(setup.players),
+      pointsAwardedThisGame: {},
     });
   },
 
@@ -103,6 +107,16 @@ export const useImpostorStore = create<ImpostorStore>((set, get) => ({
   },
 
   setPhase: (phase) => set({ phase }),
+
+  recordPointsAwarded: (playerId, pts) => {
+    const { pointsAwardedThisGame } = get();
+    set({
+      pointsAwardedThisGame: {
+        ...pointsAwardedThisGame,
+        [playerId]: (pointsAwardedThisGame[playerId] ?? 0) + pts,
+      },
+    });
+  },
 }));
 
 // Derived selectors — call these in components to avoid re-renders on unrelated state changes

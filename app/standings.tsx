@@ -7,12 +7,19 @@ import {
   SafeAreaView,
   Pressable,
   Alert,
+  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Button } from "../src/components/Button";
-import { palette, spacing, typography } from "../src/theme";
+import { palette, spacing, typography, shadows } from "../src/theme";
+import ConfettiCannon from "react-native-confetti-cannon";
+
+const { width: screenWidth } = Dimensions.get("window");
 import { usePlayerStore } from "../src/store/players";
 import { useSessionStore } from "../src/store/session";
+import { TrophyIcon } from "../src/assets/icons/TrophyIcon";
+import { BackButton } from "../src/components/BackButton";
+import { MedalIcon } from "../src/assets/icons/MedalIcon";
 
 const ACCENT = palette.warning;
 
@@ -68,12 +75,9 @@ export default function StandingsScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <Pressable style={styles.back} onPress={() => router.back()}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
 
         <View style={styles.hero}>
-          <Text style={styles.icon}>🏆</Text>
+          <TrophyIcon size={56} />
           <Text style={styles.title}>Standings</Text>
         </View>
 
@@ -85,9 +89,12 @@ export default function StandingsScreen() {
           <View style={styles.list}>
             {sorted.map((p, i) => (
               <View key={p.id} style={[styles.row, ranks[i] === 1 && { borderColor: ACCENT }]}>
-                <Text style={[styles.rank, ranks[i] === 1 && { color: ACCENT }]}>
-                  {ranks[i] === 1 ? "🥇" : ranks[i] === 2 ? "🥈" : ranks[i] === 3 ? "🥉" : `${ranks[i]}.`}
-                </Text>
+                <View style={{ width: 34, alignItems: "center", justifyContent: "center" }}>
+                  {ranks[i] <= 3
+                    ? <MedalIcon rank={ranks[i] as 1 | 2 | 3} size={28} />
+                    : <Text style={styles.rank}>{ranks[i]}.</Text>
+                  }
+                </View>
                 <Text style={styles.name}>{p.name}</Text>
                 <Text style={[styles.points, ranks[i] === 1 && { color: ACCENT }]}>
                   {p.totalScore} {p.totalScore === 1 ? "pt" : "pts"}
@@ -115,6 +122,16 @@ export default function StandingsScreen() {
           />
         </View>
       </ScrollView>
+
+      <BackButton onPress={() => router.back()} />
+
+      <ConfettiCannon
+        count={120}
+        origin={{ x: screenWidth / 2, y: -20 }}
+        autoStart={true}
+        fadeOut={true}
+        colors={["#FF2D78", "#4FC3F7", "#FFD54F", "#69F0AE", "#FFFFFF"]}
+      />
     </SafeAreaView>
   );
 }
@@ -138,6 +155,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
     padding: spacing.md,
+    ...shadows.sm,
   },
   rank: { fontSize: 22, width: 34, textAlign: "center", color: palette.muted },
   name: { ...typography.bodyBold, color: palette.white, flex: 1 },

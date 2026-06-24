@@ -9,8 +9,8 @@ import {
   Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Button } from "../../../src/components/Button";
-import { palette, spacing, typography } from "../../../src/theme";
+import { GameButton } from "../../../src/components/GameButton";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { CATEGORIES } from "../../../src/games/impostor/words";
 import { useImpostorStore } from "../../../src/games/impostor/gameStore";
 import { usePlayerStore } from "../../../src/store/players";
@@ -22,9 +22,16 @@ import {
   type SessionPlayer,
 } from "../../../src/firebase/sessions";
 import { useGameIntro } from "../../../src/components/GameIntroOverlay";
+import { ImpostorIcon } from "../../../src/assets/icons/ImpostorIcon";
+import { CheckIcon } from "../../../src/assets/icons/CheckIcon";
+import { BackButton } from "../../../src/components/BackButton";
+import { BallotIcon } from "../../../src/assets/icons/BallotIcon";
+import { SpeakerIcon } from "../../../src/assets/icons/SpeakerIcon";
+import { getGameTheme } from "../../../src/games/registry";
 import type { ImpostorCategory, Player, VotingMode } from "../../../src/games/impostor/types";
 
-const ACCENT = palette.impostor;
+const GAME_THEME = getGameTheme("impostor");
+const ACCENT = GAME_THEME.accent;
 const MIN_PLAYERS = 3;
 
 function suggestImpostors(count: number) {
@@ -50,7 +57,6 @@ export default function SetupScreen() {
   const [starting, setStarting] = useState(false);
   const { showThen, overlay } = useGameIntro();
 
-  // Live session players (online mode only — for reactive player count)
   const [liveSessionPlayers, setLiveSessionPlayers] = useState<Record<string, SessionPlayer>>({});
 
   useEffect(() => {
@@ -63,7 +69,6 @@ export default function SetupScreen() {
   const onlinePlayerCount = Object.keys(liveSessionPlayers).length;
   const onlinePlayerNames = Object.values(liveSessionPlayers).map((p) => p.name);
 
-  // Default: everyone selected (offline only)
   useEffect(() => {
     if (!initialized.current && roster.length > 0) {
       setSelectedIds(new Set(roster.map((p) => p.id)));
@@ -113,7 +118,7 @@ export default function SetupScreen() {
         await startImpostorGame(sessionCode, liveSessionPlayers, category, impostorCount, votingMode);
         await setSessionCurrentGame(sessionCode, "impostor");
         showThen(
-          { icon: "🕵️", title: "Impostor", accentColor: ACCENT },
+          { icon: "🕵️", IconComponent: ImpostorIcon, title: "Impostor", accentColor: ACCENT },
           () => router.replace("/games/impostor/online/play")
         );
       } catch (e: any) {
@@ -121,7 +126,6 @@ export default function SetupScreen() {
         setStarting(false);
       }
     } else {
-      // Offline: pass-and-play with selected session players
       if (selectedCount < MIN_PLAYERS) {
         Alert.alert("Not enough players", `Select at least ${MIN_PLAYERS} players.`);
         return;
@@ -132,25 +136,21 @@ export default function SetupScreen() {
       reset();
       startGame({ mode: "pass-and-play", players, impostorCount, category });
       showThen(
-        { icon: "🕵️", title: "Impostor", accentColor: ACCENT },
+        { icon: "🕵️", IconComponent: ImpostorIcon, title: "Impostor", accentColor: ACCENT },
         () => router.push("/games/impostor/reveal")
       );
     }
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable style={styles.back} onPress={() => router.back()}>
-          <Text style={styles.backText}>‹ Back</Text>
-        </Pressable>
-
         <View style={styles.hero}>
-          <Text style={styles.icon}>🕵️</Text>
+          <ImpostorIcon size={64} />
           <Text style={styles.title}>Impostor</Text>
           <Text style={styles.tagline}>
             Most players share a secret word.{"\n"}One has no idea — can they bluff?
@@ -251,7 +251,7 @@ export default function SetupScreen() {
                           selected && { backgroundColor: ACCENT, borderColor: ACCENT },
                         ]}
                       >
-                        {selected && <Text style={styles.checkboxMark}>✓</Text>}
+                        {selected && <CheckIcon size={14} color="white" />}
                       </View>
                       <Text style={styles.rosterName}>{p.name}</Text>
                     </Pressable>
@@ -267,7 +267,6 @@ export default function SetupScreen() {
           </Section>
         )}
 
-        {/* Voting mode — only meaningful in online mode; pass-and-play always uses host-decides */}
         {isOnline && <View style={styles.votingModeSection}>
           <Text style={styles.votingModeSectionLabel}>VOTING MODE</Text>
           <View style={styles.votingModeRow}>
@@ -278,7 +277,7 @@ export default function SetupScreen() {
               ]}
               onPress={() => setVotingMode("app")}
             >
-              <Text style={styles.votingModeIcon}>🗳️</Text>
+              <BallotIcon size={28} />
               <Text style={[styles.votingModeTitle, votingMode === "app" && { color: ACCENT }]}>
                 In-App Voting
               </Text>
@@ -293,7 +292,7 @@ export default function SetupScreen() {
               ]}
               onPress={() => setVotingMode("host")}
             >
-              <Text style={styles.votingModeIcon}>🗣️</Text>
+              <SpeakerIcon size={28} />
               <Text style={[styles.votingModeTitle, votingMode === "host" && { color: ACCENT }]}>
                 Host Decides
               </Text>
@@ -304,16 +303,17 @@ export default function SetupScreen() {
           </View>
         </View>}
 
-        <Button
-          label="Start Game"
+        <GameButton
+          label={starting ? "Starting…" : "Start Game"}
           onPress={handleStart}
-          accentColor={ACCENT}
-          loading={starting}
+          color={ACCENT}
+          textColor={GAME_THEME.text}
           fullWidth
-          disabled={!canStart}
+          disabled={!canStart || starting}
           style={styles.startBtn}
         />
       </ScrollView>
+      <BackButton onPress={() => router.back()} />
       {overlay}
     </SafeAreaView>
   );
@@ -334,13 +334,12 @@ const sectionStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   scroll: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl },
   back: { marginBottom: spacing.lg },
   backText: { ...typography.bodyBold, color: palette.muted },
   hero: { alignItems: "center", marginVertical: spacing.xl },
-  icon: { fontSize: 64, marginBottom: spacing.md },
   title: { ...typography.display, color: palette.white, marginBottom: spacing.sm },
   tagline: {
     ...typography.body,
@@ -368,6 +367,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     alignItems: "center",
     justifyContent: "center",
+    ...shadows.sm,
   },
   stepBtnDisabled: { opacity: 0.35 },
   stepBtnText: { ...typography.heading2, color: palette.white },
@@ -397,6 +397,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: palette.border,
     padding: spacing.md,
+    ...shadows.sm,
   },
   checkbox: {
     width: 24,
@@ -407,7 +408,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  checkboxMark: { color: palette.white, fontSize: 14, fontWeight: "700" },
   rosterName: { ...typography.bodyBold, color: palette.white, flex: 1 },
   youLabel: {
     ...typography.caption,
@@ -435,8 +435,8 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     padding: spacing.md,
     alignItems: "center",
+    ...shadows.sm,
   },
-  votingModeIcon: { fontSize: 28, marginBottom: spacing.xs },
   votingModeTitle: {
     ...typography.caption,
     color: palette.white,

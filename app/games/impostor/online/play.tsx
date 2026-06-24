@@ -27,6 +27,11 @@ import {
 import { useSessionStore } from "../../../../src/store/session";
 import { usePlayerStore } from "../../../../src/store/players";
 import type { PlayerRole } from "../../../../src/games/impostor/types";
+import { ImpostorIcon } from "../../../../src/assets/icons/ImpostorIcon";
+import { CrewmateIcon } from "../../../../src/assets/icons/CrewmateIcon";
+import { CheckIcon } from "../../../../src/assets/icons/CheckIcon";
+import { BallotIcon } from "../../../../src/assets/icons/BallotIcon";
+import { HandshakeIcon } from "../../../../src/assets/icons/HandshakeIcon";
 
 const ACCENT = palette.impostor;
 
@@ -284,7 +289,7 @@ export default function OnlinePlayScreen() {
       <SafeAreaView style={styles.safe}>
         <ScrollView contentContainerStyle={styles.container}>
           <Text style={styles.phase}>Discussion Phase</Text>
-          <Text style={styles.title}>Time to talk 💬</Text>
+          <Text style={styles.title}>Time to talk!</Text>
 
           <View style={styles.roleSection}>
             <Text style={styles.sectionLabel}>Your role</Text>
@@ -292,12 +297,18 @@ export default function OnlinePlayScreen() {
               <HoldToReveal accentColor={ACCENT}>
                 {effectiveRole.role === "impostor" ? (
                   <View style={styles.roleContent}>
-                    <Text style={styles.roleName}>You are the Impostor 🕵️</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <ImpostorIcon size={28} />
+                      <Text style={styles.roleName}>You are the Impostor</Text>
+                    </View>
                     <Text style={styles.roleTip}>You have NO word. Listen and bluff!</Text>
                   </View>
                 ) : (
                   <View style={styles.roleContent}>
-                    <Text style={styles.roleName}>Crewmate 👥</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                      <CrewmateIcon size={28} />
+                      <Text style={styles.roleName}>Crewmate</Text>
+                    </View>
                     <Text style={styles.roleWord}>{effectiveRole.word}</Text>
                   </View>
                 )}
@@ -372,7 +383,7 @@ export default function OnlinePlayScreen() {
                         {name}
                       </Text>
                       {uid === myUid && <Text style={styles.youTag}>You</Text>}
-                      {picked && <Text style={styles.pickedCheck}>✓</Text>}
+                      {picked && <CheckIcon size={18} color={ACCENT} />}
                     </Pressable>
                   );
                 })}
@@ -396,7 +407,7 @@ export default function OnlinePlayScreen() {
       return (
         <SafeAreaView style={styles.safe}>
           <View style={styles.center}>
-            <Text style={styles.waitEmoji}>🗳️</Text>
+            <BallotIcon size={56} />
             <Text style={styles.waitTitle}>Voting in Progress</Text>
             <Text style={styles.waitSubtitle}>
               Waiting for the host to submit the result…
@@ -433,7 +444,7 @@ export default function OnlinePlayScreen() {
                     <Text style={[styles.voteRowName, picked && { color: ACCENT }]}>
                       {name}
                     </Text>
-                    {picked && <Text style={styles.pickedCheck}>✓</Text>}
+                    {picked && <CheckIcon size={18} color={ACCENT} />}
                   </Pressable>
                 );
               })}
@@ -457,7 +468,7 @@ export default function OnlinePlayScreen() {
     return (
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
-          <Text style={styles.waitEmoji}>✅</Text>
+          <CheckIcon size={56} />
           <Text style={styles.waitTitle}>Vote submitted!</Text>
           <Text style={styles.waitSubtitle}>
             {voteCount} of {totalPlayers} votes in…
@@ -514,9 +525,9 @@ export default function OnlinePlayScreen() {
                 : { borderColor: ACCENT, backgroundColor: ACCENT + "18" },
             ]}
           >
-            <Text style={styles.outcomeEmoji}>
-              {isTie ? "🤝" : caught ? "🎉" : "😈"}
-            </Text>
+            <View>
+              {isTie ? <HandshakeIcon size={56} /> : caught ? <CrewmateIcon size={56} /> : <ImpostorIcon size={56} />}
+            </View>
             <Text
               style={[
                 styles.outcomeTitle,
@@ -553,7 +564,7 @@ export default function OnlinePlayScreen() {
             </Text>
             {impostorNames.map((name) => (
               <View key={name} style={[styles.playerRow, { borderColor: ACCENT }]}>
-                <Text style={{ fontSize: 20 }}>🕵️</Text>
+                <ImpostorIcon size={24} />
                 <Text style={[styles.playerName, { color: ACCENT }]}>{name}</Text>
               </View>
             ))}
@@ -599,11 +610,9 @@ export default function OnlinePlayScreen() {
                         </Text>
                       )}
                       {isImpostor && (
-                        <Text
-                          style={[styles.tallyBadge, { borderColor: ACCENT, color: ACCENT }]}
-                        >
-                          🕵️
-                        </Text>
+                        <View style={[styles.tallyBadge, { borderColor: ACCENT }]}>
+                          <ImpostorIcon size={16} />
+                        </View>
                       )}
                     </View>
                   </View>
@@ -649,9 +658,9 @@ export default function OnlinePlayScreen() {
         <View style={styles.center}>
           <Text style={styles.loading}>
             {game.winner === "crewmates"
-              ? "🎉 Crewmates Win!"
+              ? "Crewmates Win!"
               : game.winner === "impostors"
-              ? "🕵️ Impostors Win!"
+              ? "Impostors Win!"
               : "Game over"}
           </Text>
           {isHost && (

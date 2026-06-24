@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { BackButton } from "../../../src/components/BackButton";
+import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
 import {
   View,
   Text,
@@ -6,22 +8,32 @@ import {
   StyleSheet,
   SafeAreaView,
   Pressable,
+  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Button } from "../../../src/components/Button";
+import { GameButton } from "../../../src/components/GameButton";
 import { Timer } from "../../../src/components/Timer";
-import { palette, spacing, typography } from "../../../src/theme";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useImpostorStore } from "../../../src/games/impostor/gameStore";
 import { usePlayerStore } from "../../../src/store/players";
 import { useSessionStore } from "../../../src/store/session";
+import { getGameTheme } from "../../../src/games/registry";
+import { TrophyIcon } from "../../../src/assets/icons/TrophyIcon";
+import { CrewmateIcon } from "../../../src/assets/icons/CrewmateIcon";
+import { ImpostorIcon } from "../../../src/assets/icons/ImpostorIcon";
+import ConfettiCannon from "react-native-confetti-cannon";
 
-const ACCENT = palette.impostor;
+const GAME_THEME = getGameTheme("impostor");
+const ACCENT = GAME_THEME.accent;
+const { width: screenWidth } = Dimensions.get("window");
 
 export default function DiscussionScreen() {
   const router = useRouter();
   const assignments = useImpostorStore((s) => s.assignments);
   const secretWord = useImpostorStore((s) => s.secretWord);
   const speakingOrder = useImpostorStore((s) => s.speakingOrder);
+  const pointsAwardedThisGame = useImpostorStore((s) => s.pointsAwardedThisGame);
+  const recordPointsAwarded = useImpostorStore((s) => s.recordPointsAwarded);
   const reset = useImpostorStore((s) => s.reset);
   const addPoints = usePlayerStore((s) => s.addPoints);
   const scoringMode = useSessionStore((s) => s.scoringMode);
@@ -29,6 +41,7 @@ export default function DiscussionScreen() {
   const [showTimer, setShowTimer] = useState(false);
   const [winnerSelection, setWinnerSelection] = useState<string | null>(null);
   const [wordRevealed, setWordRevealed] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
 
   const impostors = assignments.filter((a) => a.role === "impostor");
   const crewmates = assignments.filter((a) => a.role === "crewmate");
@@ -36,14 +49,14 @@ export default function DiscussionScreen() {
   const handleAwardCrewmates = () => {
     if (winnerSelection) return;
     const pts = scoringMode === "extended" ? 3 : 1;
-    crewmates.forEach((a) => addPoints(a.player.id, pts));
+    crewmates.forEach((a) => { addPoints(a.player.id, pts); recordPointsAwarded(a.player.id, pts); });
     setWinnerSelection("Crewmates");
   };
 
   const handleAwardImpostors = () => {
     if (winnerSelection) return;
     const pts = scoringMode === "extended" ? 4 : 1;
-    impostors.forEach((a) => addPoints(a.player.id, pts));
+    impostors.forEach((a) => { addPoints(a.player.id, pts); recordPointsAwarded(a.player.id, pts); });
     setWinnerSelection("Impostors");
   };
 
@@ -51,7 +64,17 @@ export default function DiscussionScreen() {
     if (winnerSelection) return;
     const pts = scoringMode === "extended" ? 4 : 1;
     addPoints(id, pts);
+    recordPointsAwarded(id, pts);
     setWinnerSelection(name);
+  };
+
+  const handleExitKeep = () => { reset(); router.replace('/hub'); };
+  const handleExitVoid = () => {
+    Object.entries(pointsAwardedThisGame).forEach(([id, pts]) => {
+      if (pts > 0) addPoints(id, -pts);
+    });
+    reset();
+    router.replace('/hub');
   };
 
   const handlePlayAgain = () => {
@@ -70,7 +93,13 @@ export default function DiscussionScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
+      <ExitGameDialog
+        visible={showExitDialog}
+        onKeepScores={handleExitKeep}
+        onVoidPoints={handleExitVoid}
+        onCancel={() => setShowExitDialog(false)}
+      />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         {/* Timer */}
@@ -81,11 +110,11 @@ export default function DiscussionScreen() {
               <Timer initialSeconds={180} accentColor={ACCENT} />
             </View>
           ) : (
-            <Button
+            <GameButton
               label="Start 3-Minute Timer"
               onPress={() => setShowTimer(true)}
-              variant="secondary"
-              accentColor={ACCENT}
+              color={palette.bgCard}
+              textColor={palette.muted}
               fullWidth
             />
           )}
@@ -125,7 +154,10 @@ export default function DiscussionScreen() {
           <Text style={styles.sectionLabel}>Who won this round?</Text>
           {winnerSelection ? (
             <View style={styles.winnerBadge}>
-              <Text style={styles.winnerBadgeText}>🏆 {winnerSelection} wins the round!</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <TrophyIcon size={24} />
+                <Text style={styles.winnerBadgeText}>{winnerSelection} wins the round!</Text>
+              </View>
             </View>
           ) : (
             <>
@@ -138,7 +170,7 @@ export default function DiscussionScreen() {
                   ]}
                   onPress={handleAwardCrewmates}
                 >
-                  <Text style={styles.teamBtnEmoji}>🎉</Text>
+                  <CrewmateIcon size={32} />
                   <Text style={[styles.teamBtnText, { color: palette.success }]}>Crewmates</Text>
                 </Pressable>
                 <Pressable
@@ -149,7 +181,7 @@ export default function DiscussionScreen() {
                   ]}
                   onPress={handleAwardImpostors}
                 >
-                  <Text style={styles.teamBtnEmoji}>🕵️</Text>
+                  <ImpostorIcon size={32} />
                   <Text style={[styles.teamBtnText, { color: ACCENT }]}>Impostors</Text>
                 </Pressable>
               </View>
@@ -178,30 +210,40 @@ export default function DiscussionScreen() {
 
         {/* Actions */}
         <View style={styles.actions}>
-          <Button label="Play Again" onPress={handlePlayAgain} accentColor={ACCENT} fullWidth />
-          <Button
+          <GameButton label="Play Again" onPress={handlePlayAgain} color={ACCENT} textColor={GAME_THEME.text} fullWidth />
+          <GameButton
             label="View Standings"
             onPress={handleViewStandings}
-            variant="secondary"
-            accentColor={ACCENT}
+            color={palette.bgCard}
+            textColor={palette.muted}
             fullWidth
           />
-          <Button
+          <GameButton
             label="Back to Hub"
             onPress={handleHome}
-            variant="ghost"
-            accentColor={ACCENT}
+            color={palette.bgCard}
+            textColor={palette.muted}
             fullWidth
           />
         </View>
 
       </ScrollView>
+      <BackButton onPress={() => setShowExitDialog(true)} />
+      {winnerSelection !== null && (
+        <ConfettiCannon
+          count={120}
+          origin={{ x: screenWidth / 2, y: -20 }}
+          autoStart={true}
+          fadeOut={true}
+          colors={["#FF2D78", "#FF6FA3", "#FFFFFF", "#FFB3CC"]}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.xl },
 
   section: { gap: spacing.md },
@@ -214,6 +256,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     padding: spacing.xl,
     alignItems: "center",
+    ...shadows.md,
   },
 
   speakingOrderBox: {
@@ -224,6 +267,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
     gap: 2,
+    ...shadows.sm,
   },
   speakingOrderLabel: { ...typography.caption, color: palette.muted },
   speakingOrderText: { ...typography.bodyBold, color: palette.white },
@@ -236,6 +280,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     alignItems: "center",
     gap: spacing.sm,
+    ...shadows.md,
   },
   word: { ...typography.display, color: palette.white },
   impostorLine: { ...typography.bodyBold, color: palette.muted },
@@ -247,6 +292,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     padding: spacing.lg,
     alignItems: "center",
+    ...shadows.sm,
   },
   revealWordText: { ...typography.bodyBold, color: palette.muted },
 
@@ -259,8 +305,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     alignItems: "center",
     gap: spacing.sm,
+    ...shadows.sm,
   },
-  teamBtnEmoji: { fontSize: 32 },
   teamBtnText: { ...typography.heading3 },
   specificImpostorSection: { gap: spacing.sm },
   specificLabel: { ...typography.caption, color: palette.muted },
@@ -272,6 +318,7 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm + 2,
+    ...shadows.sm,
   },
   playerBtnPressed: { borderColor: palette.warning, backgroundColor: palette.warning + "22" },
   playerBtnText: { ...typography.bodyBold, color: palette.white },
@@ -283,6 +330,7 @@ const styles = StyleSheet.create({
     borderColor: palette.warning,
     padding: spacing.md,
     alignItems: "center",
+    ...shadows.sm,
   },
   winnerBadgeText: { ...typography.bodyBold, color: palette.warning },
 

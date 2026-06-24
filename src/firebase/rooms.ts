@@ -57,6 +57,11 @@ function generateRoomCode(): string {
 }
 
 export async function ensureAnonymousAuth() {
+  // Wait for Firebase Auth to finish loading its persisted state from storage.
+  // Without this, auth.currentUser is briefly null on first mount even for a
+  // signed-in user, causing signInAnonymously to create a brand-new UID that
+  // doesn't match what's stored in Firestore player lists.
+  await auth.authStateReady();
   if (!auth.currentUser) {
     await signInAnonymously(auth);
   }

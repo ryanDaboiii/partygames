@@ -26,6 +26,15 @@ import {
   type SessionData,
 } from "../src/firebase/sessions";
 import type { ScoringMode } from "../src/store/session";
+import { PartyIcon } from "../src/assets/icons/PartyIcon";
+import { GlobeIcon } from "../src/assets/icons/GlobeIcon";
+import { LinkIcon } from "../src/assets/icons/LinkIcon";
+import { PhoneIcon } from "../src/assets/icons/PhoneIcon";
+import { TrophyIcon } from "../src/assets/icons/TrophyIcon";
+import { ChartIcon } from "../src/assets/icons/ChartIcon";
+import { ArrowRightIcon } from "../src/assets/icons/ArrowRightIcon";
+import { ArrowLeftIcon } from "../src/assets/icons/ArrowLeftIcon";
+import { XIcon } from "../src/assets/icons/XIcon";
 
 type Step =
   | "choose"
@@ -245,7 +254,7 @@ export default function LandingScreen() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.chooseContainer}>
           <View style={styles.hero}>
-            <Text style={styles.logo}>🎉</Text>
+            <PartyIcon size={64} />
             <Text style={styles.appName}>Party Games</Text>
             <Text style={styles.tagline}>Pick your setup to get started</Text>
           </View>
@@ -259,7 +268,7 @@ export default function LandingScreen() {
               }}
             >
               <View style={[styles.optionIcon, { backgroundColor: palette.wavelength + "22" }]}>
-                <Text style={styles.optionEmoji}>🌐</Text>
+                <GlobeIcon size={48} />
               </View>
               <View style={styles.optionText}>
                 <Text style={styles.optionTitle}>Create Game</Text>
@@ -267,7 +276,7 @@ export default function LandingScreen() {
                   Host a session — share a code for others to join from their phones
                 </Text>
               </View>
-              <Text style={[styles.optionArrow, { color: palette.wavelength }]}>›</Text>
+              <ArrowRightIcon size={28} style={{ color: palette.wavelength }} />
             </Pressable>
 
             <Pressable
@@ -278,7 +287,7 @@ export default function LandingScreen() {
               }}
             >
               <View style={[styles.optionIcon, { backgroundColor: palette.success + "22" }]}>
-                <Text style={styles.optionEmoji}>🔗</Text>
+                <LinkIcon size={48} />
               </View>
               <View style={styles.optionText}>
                 <Text style={styles.optionTitle}>Join Game</Text>
@@ -286,7 +295,7 @@ export default function LandingScreen() {
                   Enter a session code to join a game in progress
                 </Text>
               </View>
-              <Text style={[styles.optionArrow, { color: palette.success }]}>›</Text>
+              <ArrowRightIcon size={28} style={{ color: palette.success }} />
             </Pressable>
 
             <Pressable
@@ -297,7 +306,7 @@ export default function LandingScreen() {
               }}
             >
               <View style={[styles.optionIcon, { backgroundColor: palette.impostor + "22" }]}>
-                <Text style={styles.optionEmoji}>📱</Text>
+                <PhoneIcon size={48} />
               </View>
               <View style={styles.optionText}>
                 <Text style={styles.optionTitle}>Play on One Phone</Text>
@@ -305,7 +314,7 @@ export default function LandingScreen() {
                   No internet needed — everyone passes the phone around
                 </Text>
               </View>
-              <Text style={[styles.optionArrow, { color: palette.impostor }]}>›</Text>
+              <ArrowRightIcon size={28} style={{ color: palette.impostor }} />
             </Pressable>
           </View>
         </View>
@@ -326,7 +335,10 @@ export default function LandingScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <Pressable style={styles.back} onPress={() => setStep("choose")}>
-              <Text style={styles.backText}>‹ Back</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <ArrowLeftIcon size={18} />
+                <Text style={styles.backText}>Back</Text>
+              </View>
             </Pressable>
 
             <Text style={styles.formTitle}>Create Game</Text>
@@ -453,7 +465,10 @@ export default function LandingScreen() {
             keyboardShouldPersistTaps="handled"
           >
             <Pressable style={styles.back} onPress={() => setStep("choose")}>
-              <Text style={styles.backText}>‹ Back</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                <ArrowLeftIcon size={18} />
+                <Text style={styles.backText}>Back</Text>
+              </View>
             </Pressable>
 
             <Text style={styles.formTitle}>Join Game</Text>
@@ -587,7 +602,10 @@ export default function LandingScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Pressable style={styles.back} onPress={() => setStep("choose")}>
-            <Text style={styles.backText}>‹ Back</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <ArrowLeftIcon size={18} />
+              <Text style={styles.backText}>Back</Text>
+            </View>
           </Pressable>
 
           <Text style={styles.formTitle}>Play on One Phone</Text>
@@ -602,7 +620,7 @@ export default function LandingScreen() {
                   <View key={name} style={styles.playerRow}>
                     <Text style={styles.playerName}>{name}</Text>
                     <Pressable hitSlop={8} onPress={() => handleOfflineRemove(name)}>
-                      <Text style={styles.removeBtn}>✕</Text>
+                      <XIcon size={20} />
                     </Pressable>
                   </View>
                 ))}
@@ -675,9 +693,7 @@ function ScoringModePicker({
               style={[pickerStyles.option, selected && pickerStyles.optionSelected]}
               onPress={() => onChange(m)}
             >
-              <Text style={pickerStyles.optionEmoji}>
-                {m === "conventional" ? "🏆" : "📈"}
-              </Text>
+              {m === "conventional" ? <TrophyIcon size={28} /> : <ChartIcon size={28} />}
               <Text style={[pickerStyles.optionTitle, selected && pickerStyles.optionTitleSelected]}>
                 {m === "conventional" ? "Conventional" : "Extended"}
               </Text>
@@ -750,7 +766,7 @@ const styles = StyleSheet.create({
   },
   hero: { alignItems: "center", marginBottom: spacing.xxl },
   logo: { fontSize: 64, marginBottom: spacing.md },
-  appName: { ...typography.display, color: palette.white, marginBottom: spacing.sm },
+  appName: { ...typography.display, fontFamily: "HennyPenny_400Regular", color: palette.white, marginBottom: spacing.sm },
   tagline: { ...typography.body, color: palette.muted },
 
   optionList: { gap: spacing.md },

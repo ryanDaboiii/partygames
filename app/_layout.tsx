@@ -1,7 +1,10 @@
 import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { Alert, Platform, StyleSheet, View } from "react-native";
+import { MuteButton } from "../src/components/MuteButton";
 import { useEffect, useRef } from "react";
+import { useFonts } from "expo-font";
+import { HennyPenny_400Regular } from "@expo-google-fonts/henny-penny";
 import { palette } from "../src/theme";
 import { useSessionStore } from "../src/store/session";
 import { usePlayerStore } from "../src/store/players";
@@ -58,6 +61,10 @@ function SessionEndWatcher() {
 }
 
 export default function RootLayout() {
+  const [fontsLoaded] = useFonts({ HennyPenny_400Regular });
+
+  if (!fontsLoaded) return null;
+
   return (
     <View style={styles.root}>
       <StatusBar style="light" />
@@ -69,6 +76,7 @@ export default function RootLayout() {
           animation: "slide_from_right",
         }}
       />
+      <MuteButton />
     </View>
   );
 }

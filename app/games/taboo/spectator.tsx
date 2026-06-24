@@ -7,11 +7,17 @@ import {
   SafeAreaView,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { palette, spacing, typography } from "../../../src/theme";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useSessionStore } from "../../../src/store/session";
 import { subscribeToSession, type SessionData } from "../../../src/firebase/sessions";
+import { BanIcon } from "../../../src/assets/icons/BanIcon";
+import { WaitingDotsIcon } from "../../../src/assets/icons/WaitingDotsIcon";
+import { BackButton } from "../../../src/components/BackButton";
+import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
+import { getGameTheme } from "../../../src/games/registry";
 
-const ACCENT = palette.taboo;
+const GAME_THEME = getGameTheme("taboo");
+const ACCENT = GAME_THEME.accent;
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -25,6 +31,7 @@ export default function TabooSpectatorScreen() {
   const mode = useSessionStore((s) => s.mode);
 
   const [session, setSession] = useState<SessionData | null>(null);
+  const [showExitDialog, setShowExitDialog] = useState(false);
 
   useEffect(() => {
     if (!sessionCode || mode !== "online") return;
@@ -47,10 +54,16 @@ export default function TabooSpectatorScreen() {
     : [];
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
+      <ExitGameDialog
+        visible={showExitDialog}
+        onKeepScores={() => { setShowExitDialog(false); router.replace('/hub'); }}
+        onVoidPoints={() => { setShowExitDialog(false); router.replace('/hub'); }}
+        onCancel={() => setShowExitDialog(false)}
+      />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <Text style={styles.heroEmoji}>🚫</Text>
+          <BanIcon size={64} />
           <Text style={styles.heroTitle}>Taboo</Text>
           <Text style={styles.heroSubtitle}>Being played on the host's phone</Text>
         </View>
@@ -83,16 +96,17 @@ export default function TabooSpectatorScreen() {
         )}
 
         <View style={styles.waitingRow}>
-          <Text style={styles.waitingDot}>●</Text>
+          <WaitingDotsIcon size={24} />
           <Text style={styles.waitingText}>Waiting for round to finish…</Text>
         </View>
       </ScrollView>
+      <BackButton onPress={() => setShowExitDialog(true)} color={GAME_THEME.accent} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.xl },
 
   hero: { alignItems: "center", paddingTop: spacing.xl, gap: spacing.sm },
@@ -121,6 +135,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: palette.border,
     padding: spacing.md,
+    ...shadows.sm,
   },
   avatar: {
     width: 36,

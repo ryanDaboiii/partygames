@@ -8,6 +8,7 @@ import {
   Vibration,
 } from "react-native";
 import { palette, spacing, typography } from "../theme";
+import LockIcon from "../assets/icons/LockIcon";
 
 interface HoldToRevealProps {
   /** Content shown when revealed */
@@ -93,7 +94,7 @@ export function HoldToReveal({
       <Animated.View
         style={[styles.progressFill, { width: progressWidth, backgroundColor: accentColor + "33" }]}
       />
-      <Text style={styles.lockIcon}>🔒</Text>
+      <LockIcon size={40} />
       <Text style={styles.holdLabel}>{holdLabel}</Text>
       <Text style={[styles.holdSub, { color: accentColor }]}>
         Hold and don't let others see
@@ -120,10 +121,6 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     bottom: 0,
-  },
-  lockIcon: {
-    fontSize: 40,
-    marginBottom: spacing.sm,
   },
   holdLabel: {
     ...typography.heading3,

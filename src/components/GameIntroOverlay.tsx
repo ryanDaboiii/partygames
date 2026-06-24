@@ -1,9 +1,10 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { ComponentType, useCallback, useRef, useState } from "react";
 import { Animated, Modal, StyleSheet, Text, View } from "react-native";
 import { palette, spacing, typography } from "../theme";
 
 interface GameInfo {
   icon: string;
+  IconComponent?: ComponentType<{ size?: number }>;
   title: string;
   accentColor: string;
 }
@@ -46,7 +47,10 @@ export function useGameIntro() {
         )}
         {/* Only the content fades/scales */}
         <Animated.View style={[styles.content, { opacity, transform: [{ scale }] }]}>
-          <Text style={styles.emoji}>{gameInfo?.icon}</Text>
+          {gameInfo?.IconComponent
+            ? <gameInfo.IconComponent size={96} />
+            : <Text style={styles.emoji}>{gameInfo?.icon}</Text>
+          }
           <Text style={[styles.title, gameInfo ? { color: gameInfo.accentColor } : undefined]}>
             {gameInfo?.title}
           </Text>

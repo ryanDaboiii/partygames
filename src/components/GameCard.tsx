@@ -5,7 +5,7 @@ import {
   View,
   StyleSheet,
 } from "react-native";
-import { palette, spacing, typography } from "../theme";
+import { palette, spacing, typography, shadows } from "../theme";
 import type { GameDefinition } from "../games/registry";
 
 interface GameCardProps {
@@ -35,7 +35,7 @@ export function GameCard({ game, onPress }: GameCardProps) {
       />
 
       <View style={styles.content}>
-        <Text style={styles.icon}>{game.icon}</Text>
+        <game.IconComponent size={48} />
 
         <View style={styles.textBlock}>
           <Text style={[styles.title, isComingSoon && styles.dimText]}>
@@ -69,6 +69,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
     borderWidth: 1,
     borderColor: palette.border,
+    ...shadows.md,
   },
   cardDim: {
     opacity: 0.5,
@@ -88,9 +89,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: spacing.lg,
     gap: spacing.md,
-  },
-  icon: {
-    fontSize: 36,
   },
   textBlock: {
     flex: 1,

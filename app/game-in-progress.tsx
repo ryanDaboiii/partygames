@@ -10,6 +10,8 @@ import { useRouter } from "expo-router";
 import { palette, spacing, typography } from "../src/theme";
 import { useSessionStore } from "../src/store/session";
 import { subscribeToSession, type SessionData } from "../src/firebase/sessions";
+import { WaitingDotsIcon } from "../src/assets/icons/WaitingDotsIcon";
+import { BackButton } from "../src/components/BackButton";
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -19,10 +21,10 @@ function getInitials(name: string): string {
 
 function gameName(id: string | null): string {
   switch (id) {
-    case "impostor": return "Impostor 🕵️";
-    case "wavelength": return "Wavelength 📡";
-    case "taboo": return "Taboo 🚫";
-    default: return "A game 🎮";
+    case "impostor": return "Impostor";
+    case "wavelength": return "Wavelength";
+    case "taboo": return "Taboo";
+    default: return "A game";
   }
 }
 
@@ -100,10 +102,11 @@ export default function GameInProgressScreen() {
         )}
 
         <View style={styles.waitingRow}>
-          <Text style={[styles.waitingDot, { color: accent }]}>●</Text>
+          <WaitingDotsIcon size={24} />
           <Text style={styles.waitingText}>Waiting for the host…</Text>
         </View>
       </ScrollView>
+      <BackButton onPress={() => router.replace('/hub')} />
     </SafeAreaView>
   );
 }

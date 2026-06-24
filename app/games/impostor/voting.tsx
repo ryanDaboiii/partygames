@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { BackButton } from "../../../src/components/BackButton";
+import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
 import {
   View,
   Text,
@@ -8,11 +10,15 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { HoldToReveal } from "../../../src/components/HoldToReveal";
-import { Button } from "../../../src/components/Button";
-import { palette, spacing, typography } from "../../../src/theme";
+import { GameButton } from "../../../src/components/GameButton";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useImpostorStore } from "../../../src/games/impostor/gameStore";
+import { getGameTheme } from "../../../src/games/registry";
+import { CheckIcon } from "../../../src/assets/icons/CheckIcon";
+import { playSfx } from "../../../src/hooks/useSoundEffects";
 
-const ACCENT = palette.impostor;
+const GAME_THEME = getGameTheme("impostor");
+const ACCENT = GAME_THEME.accent;
 
 export default function VotingScreen() {
   const router = useRouter();
@@ -21,9 +27,11 @@ export default function VotingScreen() {
   const votingIndex = useImpostorStore((s) => s.votingIndex);
   const submitVote = useImpostorStore((s) => s.submitVote);
   const advanceVoting = useImpostorStore((s) => s.advanceVoting);
+  const reset = useImpostorStore((s) => s.reset);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
 
   const isLast = votingIndex === assignments.length - 1;
   const voter = assignments[votingIndex];
@@ -34,6 +42,7 @@ export default function VotingScreen() {
 
   const handleSubmit = () => {
     if (!selectedId) return;
+    playSfx("correct");
     submitVote({ voterId: voter.player.id, accusedId: selectedId });
     setSubmitted(true);
   };
@@ -48,8 +57,16 @@ export default function VotingScreen() {
     }
   };
 
+  const handleExitKeep = () => { reset(); router.replace('/hub'); };
+
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
+      <ExitGameDialog
+        visible={showExitDialog}
+        onKeepScores={handleExitKeep}
+        onVoidPoints={handleExitKeep}
+        onCancel={() => setShowExitDialog(false)}
+      />
       <View style={styles.container}>
         {/* Progress */}
         <View style={styles.dots}>
@@ -102,23 +119,27 @@ export default function VotingScreen() {
                       {a.player.name}
                     </Text>
                     {selectedId === a.player.id && (
-                      <Text style={{ color: ACCENT }}>✓</Text>
+                      <CheckIcon size={18} color={ACCENT} />
                     )}
                   </Pressable>
                 ))}
               </View>
 
               {!submitted ? (
-                <Button
+                <GameButton
                   label="Confirm Vote"
                   onPress={handleSubmit}
-                  accentColor={ACCENT}
+                  color={ACCENT}
+                  textColor={GAME_THEME.text}
                   fullWidth
                   disabled={!selectedId}
                 />
               ) : (
                 <View style={styles.votedBadge}>
-                  <Text style={styles.votedText}>Vote locked in ✓</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <CheckIcon size={20} />
+                    <Text style={styles.votedText}>Vote locked in</Text>
+                  </View>
                 </View>
               )}
             </View>
@@ -126,24 +147,26 @@ export default function VotingScreen() {
         </View>
 
         {submitted && (
-          <Button
+          <GameButton
             label={
               isLast
                 ? "See Results"
                 : `Done → Pass to ${assignments[votingIndex + 1]?.player.name ?? ""}`
             }
             onPress={handleNext}
-            accentColor={ACCENT}
+            color={ACCENT}
+            textColor={GAME_THEME.text}
             fullWidth
           />
         )}
       </View>
+      <BackButton onPress={() => setShowExitDialog(true)} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
   container: { flex: 1, padding: spacing.lg, justifyContent: "space-between" },
   dots: { flexDirection: "row", gap: spacing.sm, justifyContent: "center" },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: palette.border },
@@ -164,6 +187,7 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: palette.border,
     padding: spacing.md,
+    ...shadows.sm,
   },
   voteOptionText: { ...typography.bodyBold, color: palette.white },
   votedBadge: {

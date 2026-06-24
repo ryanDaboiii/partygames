@@ -17,11 +17,14 @@ import { Redirect, useRouter } from "expo-router";
 import { GAMES } from "../src/games/registry";
 import { GameCard } from "../src/components/GameCard";
 import { Button } from "../src/components/Button";
-import { palette, spacing, typography } from "../src/theme";
+import { palette, spacing, typography, shadows } from "../src/theme";
 import { usePlayerStore } from "../src/store/players";
 import { useSessionStore } from "../src/store/session";
 import { subscribeToSession, endOnlineSession, type SessionData } from "../src/firebase/sessions";
-import { useGameIntro } from "../src/components/GameIntroOverlay";
+import { PartyIcon } from "../src/assets/icons/PartyIcon";
+import { HourglassIcon } from "../src/assets/icons/HourglassIcon";
+import { MedalIcon } from "../src/assets/icons/MedalIcon";
+import { SparkleIcon } from "../src/assets/icons/SparkleIcon";
 
 const ACCENT = palette.wavelength;
 
@@ -50,18 +53,15 @@ export default function HubScreen() {
 
   // Online session live data (non-host uses this for player list & game routing)
   const [liveSession, setLiveSession] = useState<SessionData | null>(null);
-  const [pendingGame, setPendingGame] = useState<string | null>(null);
 
   const isFirstCallbackRef = useRef(true);
-  const hasNavigatedToGameRef = useRef(false);
-
-  const { showThen, overlay } = useGameIntro();
+  const lastNavigatedGameRef = useRef<string | null>(null);
 
   // ── Online session subscription ────────────────────────────────────────────
   useEffect(() => {
     if (mode !== "online" || !sessionCode) return;
     isFirstCallbackRef.current = true;
-    hasNavigatedToGameRef.current = false;
+    lastNavigatedGameRef.current = null;
 
     return subscribeToSession(sessionCode, (data: SessionData) => {
       if (data.ended) return; // handled globally by SessionEndWatcher in _layout.tsx
@@ -75,20 +75,17 @@ export default function HubScreen() {
 
       if (isFirstCallbackRef.current) {
         isFirstCallbackRef.current = false;
-        // Already in a game when we arrived — show a banner, don't auto-navigate
-        if (isActive) setPendingGame(game);
+        // Record the current game so we don't re-navigate to an already-running game
+        if (isActive && game) lastNavigatedGameRef.current = game;
         return;
       }
 
-      // Game just started while we were waiting
-      if (isActive && !hasNavigatedToGameRef.current) {
-        hasNavigatedToGameRef.current = true;
-        setPendingGame(null);
+      // Navigate only when a genuinely new game starts (game id differs from last navigation).
+      // lastNavigatedGameRef is only reset on hub mount, so null callbacks from
+      // clearSessionCurrentGame during game setup don't re-arm the guard.
+      if (isActive && game && game !== lastNavigatedGameRef.current) {
+        lastNavigatedGameRef.current = game;
         navigateToGame(game);
-      } else if (!game) {
-        // Game ended — reset nav ref so we can navigate to the next one
-        setPendingGame(null);
-        hasNavigatedToGameRef.current = false;
       }
     });
   }, [mode, sessionCode, isHost]);
@@ -98,17 +95,12 @@ export default function HubScreen() {
 
   // ── Helpers ────────────────────────────────────────────────────────────────
   const navigateToGame = (gameId: string) => {
-    const doNav = () => {
-      switch (gameId) {
-        case "impostor": router.push("/games/impostor/online/play"); break;
-        case "wavelength": router.push("/games/wavelength/online" as any); break;
-        case "taboo": router.push("/games/taboo/spectator" as any); break;
-        default: router.push("/game-in-progress" as any); break;
-      }
-    };
-    const def = GAMES.find((g) => g.id === gameId);
-    if (def) showThen({ icon: def.icon, title: def.title, accentColor: def.accentColor }, doNav);
-    else doNav();
+    switch (gameId) {
+      case "impostor": router.push("/games/impostor/online/play"); break;
+      case "wavelength": router.push("/games/wavelength/online" as any); break;
+      case "taboo": router.push("/games/taboo/spectator" as any); break;
+      default: router.push("/game-in-progress" as any); break;
+    }
   };
 
   const handleShareCode = () => {
@@ -216,30 +208,16 @@ export default function HubScreen() {
             </Pressable>
           )}
 
-          {/* Pending game banner (already in progress when we joined) */}
-          {pendingGame && (
-            <Pressable
-              style={styles.pendingBanner}
-              onPress={() => {
-                hasNavigatedToGameRef.current = true;
-                setPendingGame(null);
-                navigateToGame(pendingGame);
-              }}
-            >
-              <Text style={styles.pendingBannerText}>
-                🎮 {gameName(pendingGame)} is in progress — tap to watch
-              </Text>
-            </Pressable>
-          )}
-
           {/* Waiting message */}
           <View style={styles.waitingCard}>
-            <Text style={styles.waitingEmoji}>⏳</Text>
+            <HourglassIcon size={48} />
             <Text style={styles.waitingTitle}>
-              {hostName ? `Waiting for ${hostName}` : "Waiting for the host"}
+              {liveSession?.gameStatus === "in-progress" ? "Game in progress" : (hostName ? `Waiting for ${hostName}` : "Waiting for the host")}
             </Text>
             <Text style={styles.waitingBody}>
-              {hostName ? `${hostName} is choosing the next game…` : "The host is choosing the next game…"}
+              {liveSession?.gameStatus === "in-progress"
+                ? "The lobby is currently in a game. You'll join automatically when it ends."
+                : (hostName ? `${hostName} is choosing the next game…` : "The host is choosing the next game…")}
             </Text>
           </View>
 
@@ -255,9 +233,17 @@ export default function HubScreen() {
                     styles.leaderboardRow,
                     i === 0 && score > 0 && styles.leaderboardRowFirst,
                   ]}>
-                    <Text style={[styles.leaderboardRank, i === 0 && score > 0 && { color: palette.warning }]}>
-                      {i === 0 && score > 0 ? "🥇" : i === 1 && score > 0 ? "🥈" : i === 2 && score > 0 ? "🥉" : `${i + 1}.`}
-                    </Text>
+                    <View style={{ width: 32, alignItems: "center", justifyContent: "center" }}>
+                      {i === 0 && score > 0 ? (
+                        <MedalIcon rank={1} size={26} />
+                      ) : i === 1 && score > 0 ? (
+                        <MedalIcon rank={2} size={26} />
+                      ) : i === 2 && score > 0 ? (
+                        <MedalIcon rank={3} size={26} />
+                      ) : (
+                        <Text style={styles.leaderboardRank}>{i + 1}.</Text>
+                      )}
+                    </View>
                     <View style={styles.avatar}>
                       <Text style={styles.avatarText}>{getInitials(name)}</Text>
                     </View>
@@ -295,7 +281,7 @@ export default function HubScreen() {
           />
         </ScrollView>
 
-        {overlay}
+
       </SafeAreaView>
     );
   }
@@ -313,7 +299,10 @@ export default function HubScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.appName}>🎉 Party Games</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <PartyIcon size={24} />
+              <Text style={styles.appName}>Party Games</Text>
+            </View>
             <Text style={styles.subtitle}>Pick a game to play next</Text>
           </View>
           {mode === "online" && sessionCode && (
@@ -416,7 +405,10 @@ export default function HubScreen() {
           ))}
         </View>
 
-        <Text style={styles.footer}>More games coming soon ✦</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, marginTop: spacing.xxl }}>
+          <SparkleIcon size={14} />
+          <Text style={styles.footer}>More games coming soon</Text>
+        </View>
 
         <Button
           label="End Session"
@@ -427,8 +419,6 @@ export default function HubScreen() {
           style={styles.endSessionBtn}
         />
       </ScrollView>
-
-      {overlay}
 
       {/* Add Player modal (host / offline only) */}
       <Modal
@@ -499,7 +489,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     marginTop: spacing.lg,
   },
-  appName: { ...typography.heading1, color: palette.white, marginBottom: spacing.xs },
+  appName: { ...typography.heading1, fontFamily: "HennyPenny_400Regular", color: palette.white, marginBottom: spacing.xs },
   subtitle: { ...typography.body, color: palette.muted },
   codeBadge: {
     backgroundColor: palette.bgCard,
@@ -537,6 +527,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     maxWidth: 180,
+    ...shadows.sm,
   },
   chipPressed: { opacity: 0.7 },
   avatar: {
@@ -579,7 +570,6 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: palette.border,
     textAlign: "center",
-    marginTop: spacing.xxl,
   },
   endSessionBtn: { marginTop: spacing.xl },
 
@@ -599,17 +589,6 @@ const styles = StyleSheet.create({
   codeBannerValue: { fontSize: 36, fontWeight: "900", color: ACCENT, letterSpacing: 6 },
   codeBannerHint: { ...typography.caption, color: palette.muted, marginTop: spacing.xs },
 
-  pendingBanner: {
-    backgroundColor: palette.wavelength + "22",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: palette.wavelength,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    alignItems: "center",
-  },
-  pendingBannerText: { ...typography.bodyBold, color: palette.wavelength, textAlign: "center" },
-
   waitingCard: {
     backgroundColor: palette.bgCard,
     borderRadius: 20,
@@ -619,6 +598,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.sm,
     marginBottom: spacing.xl,
+    ...shadows.md,
   },
   waitingEmoji: { fontSize: 48 },
   waitingTitle: { ...typography.heading2, color: palette.white },
@@ -638,7 +618,7 @@ const styles = StyleSheet.create({
   onlinePlayerName: { ...typography.bodyBold, color: palette.white, flex: 1 },
 
   // Leaderboard (non-host waiting screen)
-  leaderboardList: { gap: spacing.sm },
+  leaderboardList: { gap: spacing.sm, marginTop: spacing.md },
   leaderboardRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -687,6 +667,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.xxl,
     gap: spacing.md,
+    ...shadows.lg,
   },
   modalTitle: { ...typography.heading2, color: palette.white },
   modalInput: {

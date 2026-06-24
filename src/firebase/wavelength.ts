@@ -9,7 +9,8 @@ import {
 import { db } from "./config";
 
 export interface WavelengthFSAssignment {
-  categoryName: string;
+  categoryName: string;   // base noun e.g. "Movies"
+  categoryLabel: string;  // full phrase e.g. "Movies based on their intensity"
   categoryHint: string;
 }
 
@@ -28,6 +29,7 @@ export interface WavelengthFSState {
   turnOrder: string[];         // shuffled non-guesser UIDs for clue phase
   currentTurnIndex: number;    // index into turnOrder
   revealedBy: string[];         // UIDs of non-guessers who completed hold-to-reveal this round
+  categoryStyle: "specific" | "simple";
   guess: number | null;        // guesser's submitted number
   result: { correct: boolean } | null;
 }

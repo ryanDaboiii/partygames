@@ -7,12 +7,23 @@ import {
   Pressable,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { palette, spacing, typography, scaleFont } from "../../../src/theme";
+import { palette, spacing, typography, scaleFont, shadows } from "../../../src/theme";
 import { useTabooStore, getCurrentCluegiver } from "../../../src/games/taboo/store";
 import { usePlayerStore } from "../../../src/store/players";
+import { useSessionStore } from "../../../src/store/session";
+import { clearSessionCurrentGame } from "../../../src/firebase/sessions";
 import { MAX_PASSES_PER_TURN } from "../../../src/games/taboo/logic";
+import { getGameTheme } from "../../../src/games/registry";
+import { BackButton } from "../../../src/components/BackButton";
+import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
+import { PauseIcon } from "../../../src/assets/icons/PauseIcon";
+import { XIcon } from "../../../src/assets/icons/XIcon";
+import { BanIcon } from "../../../src/assets/icons/BanIcon";
+import { CheckIcon } from "../../../src/assets/icons/CheckIcon";
+import { playSfx } from "../../../src/hooks/useSoundEffects";
 
-const ACCENT = palette.taboo;
+const GAME_THEME = getGameTheme("taboo");
+const ACCENT = GAME_THEME.accent;
 
 export default function TurnScreen() {
   const router = useRouter();
@@ -24,18 +35,26 @@ export default function TurnScreen() {
   const passesUsed = useTabooStore((s) => s.passesUsed);
   const totalTurnsPlayed = useTabooStore((s) => s.totalTurnsPlayed);
   const players = useTabooStore((s) => s.players);
-  const gamePoints = useTabooStore((s) => s.gamePoints);
+  const turnCorrect = useTabooStore((s) => s.turnCorrect);
+  const turnTaboos = useTabooStore((s) => s.turnTaboos);
   const turnNetScore = useTabooStore((s) => s.turnNetScore);
   const gotItAction = useTabooStore((s) => s.gotIt);
   const passAction = useTabooStore((s) => s.pass);
   const tabooAction = useTabooStore((s) => s.taboo);
   const endTurn = useTabooStore((s) => s.endTurn);
+  const gamePoints = useTabooStore((s) => s.gamePoints);
+  const reset = useTabooStore((s) => s.reset);
 
   const localPlayers = usePlayerStore((s) => s.players);
   const addPoints = usePlayerStore((s) => s.addPoints);
 
+  const mode = useSessionStore((s) => s.mode);
+  const sessionCode = useSessionStore((s) => s.sessionCode);
+  const isHost = useSessionStore((s) => s.isHost);
+
   const [timeLeft, setTimeLeft] = useState(roundTimeSecs);
   const [isPaused, setIsPaused] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
 
   const cluegiver = getCurrentCluegiver(players, totalTurnsPlayed);
   const card = deck[cardIndex % deck.length];
@@ -51,7 +70,6 @@ export default function TurnScreen() {
     if (phase === "setup") router.replace("/games/taboo");
   }, [phase]);
 
-  // Countdown timer — stops ticking while paused
   useEffect(() => {
     if (isPaused) return;
     const interval = setInterval(() => {
@@ -77,26 +95,62 @@ export default function TurnScreen() {
 
   if (!card) return null;
 
-  const liveScore = gamePoints[cluegiver] ?? 0;
+  const liveScore = Math.max(0, turnCorrect - turnTaboos);
+
+  const handleGotIt = () => { playSfx("correct"); gotItAction(); };
+  const handleTaboo = () => { playSfx("wrong"); tabooAction(); };
+
+  const handleExitKeep = async () => {
+    const partialScore = Math.max(0, turnCorrect - turnTaboos);
+    if (partialScore > 0) {
+      const match = localPlayers.find((p) => p.name.toLowerCase() === cluegiver.toLowerCase());
+      if (match) addPoints(match.id, partialScore);
+    }
+    if (mode === "online" && isHost && sessionCode) {
+      try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
+    }
+    reset();
+    router.replace('/hub');
+  };
+
+  const handleExitVoid = async () => {
+    Object.entries(gamePoints).forEach(([name, pts]) => {
+      if (pts > 0) {
+        const match = localPlayers.find((p) => p.name.toLowerCase() === name.toLowerCase());
+        if (match) addPoints(match.id, -pts);
+      }
+    });
+    if (mode === "online" && isHost && sessionCode) {
+      try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
+    }
+    reset();
+    router.replace('/hub');
+  };
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
+      <ExitGameDialog
+        visible={showExitDialog}
+        onKeepScores={handleExitKeep}
+        onVoidPoints={handleExitVoid}
+        onCancel={() => setShowExitDialog(false)}
+      />
       {/* Timer + player info */}
       <View style={styles.statusStrip}>
-        <View style={[styles.timerBadge, { borderColor: timeColor }]}>
-          <Text style={[styles.timerText, { color: timeColor }]}>{timeDisplay}</Text>
-        </View>
-        <View style={styles.playerInfo}>
-          <Text style={styles.playerNameText}>{cluegiver}</Text>
-          <Text style={styles.scoreText}>{liveScore} pts</Text>
-        </View>
         <Pressable
           style={styles.pauseBtn}
           onPress={() => setIsPaused(true)}
           hitSlop={8}
         >
-          <Text style={styles.pauseBtnText}>⏸</Text>
+          <PauseIcon size={20} />
         </Pressable>
+        <View style={styles.playerInfo}>
+          <Text style={styles.playerNameText}>{cluegiver}</Text>
+          <Text style={styles.scoreText}>{liveScore} pts</Text>
+        </View>
+        <View style={[styles.timerBadge, { borderColor: timeColor }]}>
+          <Text style={[styles.timerText, { color: timeColor }]}>{timeDisplay}</Text>
+        </View>
       </View>
 
       {/* Card */}
@@ -113,7 +167,7 @@ export default function TurnScreen() {
           <View style={styles.tabooList}>
             {card.tabooWords.map((w) => (
               <View key={w} style={styles.tabooWordRow}>
-                <Text style={styles.tabooWordIcon}>✗</Text>
+                <XIcon size={16} />
                 <Text style={styles.tabooWord}>{w}</Text>
               </View>
             ))}
@@ -125,10 +179,13 @@ export default function TurnScreen() {
       <View style={styles.tabooArea}>
         <Pressable
           style={({ pressed }) => [styles.tabooBtn, pressed && styles.tabooBtnPressed]}
-          onPress={tabooAction}
+          onPress={handleTaboo}
           disabled={isPaused}
         >
-          <Text style={styles.tabooBtnText}>🚫 TABOO!</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <BanIcon size={24} />
+            <Text style={styles.tabooBtnText}>TABOO!</Text>
+          </View>
         </Pressable>
       </View>
 
@@ -143,7 +200,7 @@ export default function TurnScreen() {
           onPress={passAction}
           disabled={!canPass || isPaused}
         >
-          <Text style={[styles.passBtnText, (!canPass || isPaused) && { color: palette.border }]}>
+          <Text style={[styles.passBtnText, (!canPass || isPaused) && { opacity: 0.4 }]}>
             Skip ({passesLeft})
           </Text>
         </Pressable>
@@ -154,22 +211,26 @@ export default function TurnScreen() {
             isPaused && styles.gotItBtnDisabled,
             pressed && !isPaused && styles.gotItBtnPressed,
           ]}
-          onPress={gotItAction}
+          onPress={handleGotIt}
           disabled={isPaused}
         >
-          <Text style={styles.gotItBtnText}>✓ Got it!</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <CheckIcon size={24} color={GAME_THEME.text} />
+            <Text style={[styles.gotItBtnText, { color: GAME_THEME.text }]}>Got it!</Text>
+          </View>
         </Pressable>
       </View>
 
+      <BackButton onPress={() => setShowExitDialog(true)} color={GAME_THEME.accent} />
       {/* Pause overlay */}
       {isPaused && (
         <View style={styles.pauseOverlay}>
           <Text style={styles.pauseTitle}>Paused</Text>
           <Pressable
-            style={styles.resumeBtn}
+            style={[styles.resumeBtn, { backgroundColor: ACCENT }]}
             onPress={() => setIsPaused(false)}
           >
-            <Text style={styles.resumeBtnText}>Resume</Text>
+            <Text style={[styles.resumeBtnText, { color: GAME_THEME.text }]}>Resume</Text>
           </Pressable>
         </View>
       )}
@@ -178,7 +239,7 @@ export default function TurnScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: palette.bg },
+  safe: { flex: 1 },
 
   tabooArea: {
     paddingHorizontal: spacing.lg,
@@ -207,7 +268,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: spacing.lg,
+    paddingLeft: 72,
+    paddingRight: 60,
     paddingVertical: spacing.md,
     gap: spacing.md,
   },
@@ -224,7 +286,7 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     fontVariant: ["tabular-nums"],
   },
-  playerInfo: { flex: 1, alignItems: "flex-end", gap: 2 },
+  playerInfo: { flex: 1, alignItems: "center", gap: 2 },
   playerNameText: { ...typography.label, color: palette.muted },
   scoreText: { ...typography.heading2, color: ACCENT },
 
@@ -238,10 +300,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  pauseBtnText: {
-    fontSize: scaleFont(18),
-    color: palette.muted,
-  },
 
   cardArea: {
     flex: 1,
@@ -249,22 +307,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   card: {
-    backgroundColor: palette.bgCard,
+    backgroundColor: GAME_THEME.accentMuted,
     borderRadius: 24,
     borderWidth: 1.5,
-    borderColor: palette.border,
+    borderColor: ACCENT,
     padding: spacing.xl,
     gap: spacing.md,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    ...shadows.lg,
   },
   targetWord: {
     fontSize: scaleFont(40),
     fontWeight: "900",
-    color: palette.white,
+    color: ACCENT,
     textAlign: "center",
     letterSpacing: 1,
   },
@@ -278,13 +332,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing.sm,
-  },
-  tabooWordIcon: {
-    fontSize: scaleFont(16),
-    color: palette.danger,
-    fontWeight: "700",
-    width: 20,
-    textAlign: "center",
   },
   tabooWord: {
     ...typography.bodyBold,
@@ -300,17 +347,17 @@ const styles = StyleSheet.create({
   },
   passBtn: {
     flex: 1,
-    backgroundColor: palette.bgCard,
+    backgroundColor: GAME_THEME.accentMuted,
     borderRadius: 18,
     borderWidth: 1.5,
-    borderColor: palette.border,
+    borderColor: GAME_THEME.accentLight,
     paddingVertical: spacing.lg,
     alignItems: "center",
     justifyContent: "center",
   },
   passBtnDisabled: { opacity: 0.4 },
-  passBtnPressed: { backgroundColor: palette.border + "44" },
-  passBtnText: { ...typography.bodyBold, color: palette.muted },
+  passBtnPressed: { opacity: 0.7 },
+  passBtnText: { ...typography.bodyBold, color: GAME_THEME.accentLight },
 
   gotItBtn: {
     flex: 2,
@@ -325,17 +372,15 @@ const styles = StyleSheet.create({
   gotItBtnText: {
     fontSize: scaleFont(22),
     fontWeight: "900",
-    color: palette.white,
   },
 
-  // Pause overlay
   pauseOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: palette.bg + "F2",
+    backgroundColor: GAME_THEME.accentDark + "F2",
     justifyContent: "center",
     alignItems: "center",
     gap: spacing.xl,
-    zIndex: 10,
+    zIndex: 1000,
   },
   pauseTitle: {
     fontSize: scaleFont(52),
@@ -344,7 +389,6 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
   },
   resumeBtn: {
-    backgroundColor: ACCENT,
     borderRadius: 20,
     paddingHorizontal: spacing.xxl,
     paddingVertical: spacing.lg,
@@ -354,6 +398,5 @@ const styles = StyleSheet.create({
   resumeBtnText: {
     fontSize: scaleFont(22),
     fontWeight: "900",
-    color: palette.white,
   },
 });

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Icon Gallery</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0d0d14;
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    padding: 32px 24px 64px;
+    min-height: 100vh;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 900;
+    color: #FF2D78;
+    margin-bottom: 6px;
+    letter-spacing: -0.5px;
+  }
+
+  .subtitle {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+  }
+
+  .badge {
+    background: #FF2D78;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 20px;
+    min-width: 120px;
+    text-align: center;
+  }
+
+  .btn {
+    background: #1a1a2e;
+    border: 1.5px solid #333;
+    color: #ccc;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn:hover { border-color: #FF2D78; color: #fff; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 16px;
+  }
+
+  .card {
+    background: #131320;
+    border: 2px solid #1e1e35;
+    border-radius: 16px;
+    padding: 20px 12px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s, transform 0.1s;
+    user-select: none;
+    position: relative;
+  }
+  .card:hover { border-color: #444; transform: translateY(-2px); }
+  .card.liked {
+    border-color: #FF2D78;
+    background: #1f0a12;
+  }
+
+  .card-icon { width: 64px; height: 64px; }
+  .card-icon svg { width: 64px; height: 64px; }
+
+  .card-name {
+    font-size: 11px;
+    font-weight: 700;
+    color: #888;
+    text-align: center;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .card.liked .card-name { color: #FF2D78; }
+
+  .check-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 20px;
+    height: 20px;
+    background: #FF2D78;
+    border-radius: 50%;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 900;
+    color: white;
+  }
+  .card.liked .check-badge { display: flex; }
+
+  /* Variant badge for icons shown multiple times */
+  .variant-label {
+    font-size: 10px;
+    color: #555;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    margin-top: -6px;
+  }
+
+  /* Summary panel */
+  .summary {
+    margin-top: 48px;
+    padding: 24px;
+    background: #131320;
+    border: 1.5px solid #1e1e35;
+    border-radius: 16px;
+    display: none;
+  }
+  .summary.visible { display: block; }
+  .summary h2 {
+    font-size: 16px;
+    font-weight: 800;
+    color: #FF2D78;
+    margin-bottom: 12px;
+  }
+  .summary-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .summary-chip {
+    background: #FF2D7820;
+    border: 1.5px solid #FF2D7866;
+    color: #FF2D78;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 12px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #444;
+    margin-bottom: 12px;
+    margin-top: 32px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Icon Gallery</h1>
+<p class="subtitle">Click any icon to mark it as liked. Click again to unmark.</p>
+
+<div class="toolbar">
+  <div class="badge" id="counter">0 liked</div>
+  <button class="btn" onclick="clearAll()">Clear all</button>
+  <button class="btn" onclick="selectAll()">Select all</button>
+</div>
+
+<div class="section-label">UI Icons</div>
+<div class="grid" id="grid"></div>
+
+<div class="summary" id="summary">
+  <h2>Liked Icons</h2>
+  <div class="summary-list" id="summaryList"></div>
+</div>
+
+<script>
+const icons = [
+  {
+    id: "ArrowLeft",
+    name: "Arrow Left",
+    svg: `<svg viewBox="0 0 100 100"><path d="M72 16 L26 50 L72 84" fill="none" stroke="#111111" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/><path d="M72 16 L26 50 L72 84" fill="none" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "ArrowRight",
+    name: "Arrow Right",
+    svg: `<svg viewBox="0 0 100 100"><path d="M28 16 L74 50 L28 84" fill="none" stroke="#111111" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/><path d="M28 16 L74 50 L28 84" fill="none" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "ChevronDown",
+    name: "Chevron Down",
+    svg: `<svg viewBox="0 0 100 100"><path d="M16 28 L50 72 L84 28" fill="none" stroke="#111111" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/><path d="M16 28 L50 72 L84 28" fill="none" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "Check",
+    name: "Check",
+    svg: `<svg viewBox="0 0 100 100"><path d="M12 52 L38 78 L88 20" fill="none" stroke="#111111" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 52 L38 78 L88 20" fill="none" stroke="#69F0AE" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "X",
+    name: "X / Close",
+    svg: `<svg viewBox="0 0 100 100"><line x1="16" y1="16" x2="84" y2="84" stroke="#111111" stroke-width="24" stroke-linecap="round"/><line x1="84" y1="16" x2="16" y2="84" stroke="#111111" stroke-width="24" stroke-linecap="round"/><line x1="16" y1="16" x2="84" y2="84" stroke="#FF2D78" stroke-width="15" stroke-linecap="round"/><line x1="84" y1="16" x2="16" y2="84" stroke="#FF2D78" stroke-width="15" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "Ban",
+    name: "Ban",
+    svg: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="#FF2D78" stroke="#111111" stroke-width="7"/><line x1="20" y1="20" x2="80" y2="80" stroke="#111111" stroke-width="18" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "Pause",
+    name: "Pause",
+    svg: `<svg viewBox="0 0 100 100"><rect x="16" y="14" width="28" height="72" rx="7" fill="white" stroke="#111111" stroke-width="4"/><rect x="56" y="14" width="28" height="72" rx="7" fill="white" stroke="#111111" stroke-width="4"/></svg>`
+  },
+  {
+    id: "Skip",
+    name: "Skip",
+    svg: `<svg viewBox="0 0 100 100"><polygon points="10,18 10,82 60,50" fill="#4FC3F7" stroke="#111111" stroke-width="5" stroke-linejoin="round"/><rect x="68" y="18" width="22" height="64" rx="5" fill="#4FC3F7" stroke="#111111" stroke-width="4"/></svg>`
+  },
+  {
+    id: "Sparkle",
+    name: "Sparkle",
+    svg: `<svg viewBox="0 0 100 100"><polygon points="50,6 58,42 94,50 58,58 50,94 42,58 6,50 42,42" fill="#FFD54F" stroke="#111111" stroke-width="4" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "CategorySwitch",
+    name: "Category Switch",
+    svg: `<svg viewBox="0 0 100 100"><path d="M72 30 L28 30" fill="none" stroke="#111111" stroke-width="14" stroke-linecap="round"/><path d="M72 30 L28 30" fill="none" stroke="#FFD54F" stroke-width="8" stroke-linecap="round"/><polygon points="8,30 30,18 30,42" fill="#FFD54F" stroke="#111111" stroke-width="4" stroke-linejoin="round"/><path d="M28 70 L72 70" fill="none" stroke="#111111" stroke-width="14" stroke-linecap="round"/><path d="M28 70 L72 70" fill="none" stroke="#FFD54F" stroke-width="8" stroke-linecap="round"/><polygon points="92,70 70,58 70,82" fill="#FFD54F" stroke="#111111" stroke-width="4" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "WaitingDots",
+    name: "Waiting Dots",
+    svg: `<svg viewBox="0 0 100 100"><circle cx="22" cy="50" r="12" fill="#FF2D78" opacity="0.4"/><circle cx="50" cy="50" r="12" fill="#FF2D78" opacity="0.7"/><circle cx="78" cy="50" r="12" fill="#FF2D78"/></svg>`
+  },
+  {
+    id: "Globe",
+    name: "Globe",
+    svg: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="38" fill="#4FC3F7" stroke="#111111" stroke-width="6"/><path d="M50 12 Q72 28 72 50 Q72 72 50 88" fill="none" stroke="#111111" stroke-width="4"/><path d="M50 12 Q28 28 28 50 Q28 72 50 88" fill="none" stroke="#111111" stroke-width="4"/><line x1="12" y1="50" x2="88" y2="50" stroke="#111111" stroke-width="4"/><path d="M22 30 Q50 22 78 30" fill="none" stroke="#111111" stroke-width="3"/><path d="M22 70 Q50 78 78 70" fill="none" stroke="#111111" stroke-width="3"/></svg>`
+  },
+  {
+    id: "Link",
+    name: "Link",
+    svg: `<svg viewBox="0 0 100 100"><circle cx="34" cy="50" r="22" fill="none" stroke="#111111" stroke-width="10"/><circle cx="34" cy="50" r="22" fill="none" stroke="#FFD54F" stroke-width="6"/><circle cx="66" cy="50" r="22" fill="none" stroke="#111111" stroke-width="10"/><circle cx="66" cy="50" r="22" fill="none" stroke="#FFD54F" stroke-width="6"/></svg>`
+  },
+  {
+    id: "Phone",
+    name: "Phone",
+    svg: `<svg viewBox="0 0 100 100"><rect x="22" y="6" width="56" height="88" rx="12" fill="white" stroke="#111111" stroke-width="6"/><rect x="28" y="18" width="44" height="60" rx="5" fill="#111111"/><rect x="38" y="82" width="24" height="5" rx="2.5" fill="#111111"/></svg>`
+  },
+  {
+    id: "Chart",
+    name: "Chart",
+    svg: `<svg viewBox="0 0 100 100"><rect x="8" y="58" width="22" height="32" rx="4" fill="#FF2D78" stroke="#111111" stroke-width="4"/><rect x="39" y="36" width="22" height="54" rx="4" fill="#FF2D78" stroke="#111111" stroke-width="4"/><rect x="70" y="12" width="22" height="78" rx="4" fill="#FF2D78" stroke="#111111" stroke-width="4"/><line x1="4" y1="92" x2="96" y2="92" stroke="#111111" stroke-width="5" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "Trophy",
+    name: "Trophy",
+    svg: `<svg viewBox="0 0 100 100"><path d="M28 10 L28 54 Q28 74 50 74 Q72 74 72 54 L72 10 Z" fill="#FFD54F" stroke="#111111" stroke-width="6" stroke-linejoin="round"/><path d="M28 22 Q10 22 10 38 Q10 54 28 50" fill="none" stroke="#111111" stroke-width="8" stroke-linecap="round"/><path d="M28 22 Q10 22 10 38 Q10 54 28 50" fill="none" stroke="#FFD54F" stroke-width="5" stroke-linecap="round"/><path d="M72 22 Q90 22 90 38 Q90 54 72 50" fill="none" stroke="#111111" stroke-width="8" stroke-linecap="round"/><path d="M72 22 Q90 22 90 38 Q90 54 72 50" fill="none" stroke="#FFD54F" stroke-width="5" stroke-linecap="round"/><rect x="44" y="74" width="12" height="10" rx="2" fill="#FFD54F" stroke="#111111" stroke-width="4"/><rect x="30" y="84" width="40" height="8" rx="4" fill="#FFD54F" stroke="#111111" stroke-width="4"/></svg>`
+  },
+  {
+    id: "Hourglass",
+    name: "Hourglass",
+    svg: `<svg viewBox="0 0 100 100"><rect x="18" y="10" width="64" height="10" rx="5" fill="#FFD54F" stroke="#111" stroke-width="3.5"/><rect x="18" y="80" width="64" height="10" rx="5" fill="#FFD54F" stroke="#111" stroke-width="3.5"/><path d="M22,20 L78,20 L54,50 L46,50 Z" fill="#4FC3F7" stroke="#111" stroke-width="3" stroke-linejoin="round"/><path d="M46,50 L54,50 L78,80 L22,80 Z" fill="#FF2D78" stroke="#111" stroke-width="3" stroke-linejoin="round"/><circle cx="50" cy="50" r="5" fill="#FFD54F" stroke="#111" stroke-width="2.5"/></svg>`
+  },
+  {
+    id: "Target",
+    name: "Target",
+    svg: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="#FF2D78" stroke="#111111" stroke-width="5"/><circle cx="50" cy="50" r="30" fill="white" stroke="#111111" stroke-width="5"/><circle cx="50" cy="50" r="15" fill="#FF2D78" stroke="#111111" stroke-width="5"/></svg>`
+  },
+  {
+    id: "Radar",
+    name: "Radar",
+    svg: `<svg viewBox="0 0 100 100"><rect x="45" y="72" width="10" height="16" rx="3" fill="#FFD54F" stroke="#111" stroke-width="3"/><rect x="30" y="84" width="40" height="9" rx="4" fill="#FFD54F" stroke="#111" stroke-width="3"/><path d="M12,70 Q30,10 80,30" fill="#4FC3F7" stroke="#111" stroke-width="4" stroke-linecap="round"/><path d="M12,70 Q20,58 45,72" fill="#4FC3F7" stroke="#111" stroke-width="2" stroke-linecap="round"/><path d="M60,38 Q72,22 80,42" fill="none" stroke="#FF2D78" stroke-width="4" stroke-linecap="round"/><path d="M68,46 Q84,24 92,50" fill="none" stroke="#FF2D78" stroke-width="4" stroke-linecap="round"/><circle cx="54" cy="30" r="6" fill="#FF2D78" stroke="#111" stroke-width="2.5"/></svg>`
+  },
+  {
+    id: "Ballot",
+    name: "Ballot",
+    svg: `<svg viewBox="0 0 100 100"><rect x="6" y="46" width="88" height="48" rx="12" fill="#4FC3F7" stroke="#111111" stroke-width="6"/><rect x="30" y="40" width="40" height="14" rx="7" fill="#111111"/><rect x="26" y="4" width="48" height="50" rx="8" fill="white" stroke="#111111" stroke-width="6"/><path d="M36 28 L46 40 L66 18" fill="none" stroke="#69F0AE" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "Handshake",
+    name: "Handshake",
+    svg: `<svg viewBox="0 0 100 100"><rect x="5" y="44" width="36" height="16" rx="8" fill="#FFD54F" stroke="#111" stroke-width="3.5"/><rect x="59" y="44" width="36" height="16" rx="8" fill="#FFD54F" stroke="#111" stroke-width="3.5"/><rect x="30" y="22" width="13" height="28" rx="6" fill="#FF2D78" stroke="#111" stroke-width="3" transform="rotate(-20 36 36)"/><rect x="40" y="18" width="13" height="30" rx="6" fill="#FF2D78" stroke="#111" stroke-width="3" transform="rotate(-5 46 33)"/><rect x="50" y="20" width="13" height="28" rx="6" fill="#FF2D78" stroke="#111" stroke-width="3" transform="rotate(12 56 34)"/><rect x="57" y="54" width="13" height="28" rx="6" fill="#4FC3F7" stroke="#111" stroke-width="3" transform="rotate(160 63 68)"/><rect x="47" y="56" width="13" height="30" rx="6" fill="#4FC3F7" stroke="#111" stroke-width="3" transform="rotate(175 53 71)"/><rect x="37" y="54" width="13" height="28" rx="6" fill="#4FC3F7" stroke="#111" stroke-width="3" transform="rotate(192 43 68)"/><circle cx="50" cy="50" r="13" fill="#FFD54F" stroke="#111" stroke-width="3.5"/><line x1="44" y1="44" x2="56" y2="56" stroke="#111" stroke-width="2.5" stroke-linecap="round"/><line x1="56" y1="44" x2="44" y2="56" stroke="#111" stroke-width="2.5" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "Party",
+    name: "Party",
+    svg: `<svg viewBox="0 0 100 100"><polygon points="6,94 50,94 72,16" fill="#FF2D78" stroke="#111111" stroke-width="5" stroke-linejoin="round"/><circle cx="82" cy="8" r="7" fill="#FFD54F" stroke="#111111" stroke-width="3"/><circle cx="96" cy="26" r="6" fill="#4FC3F7" stroke="#111111" stroke-width="3"/><circle cx="90" cy="46" r="5" fill="#69F0AE" stroke="#111111" stroke-width="3"/><circle cx="80" cy="28" r="4" fill="#FF2D78" stroke="#111111" stroke-width="3"/><circle cx="96" cy="10" r="4" fill="#69F0AE" stroke="#111111" stroke-width="2"/><path d="M72 16 Q90 4 98 18" fill="none" stroke="#FFD54F" stroke-width="5" stroke-linecap="round"/><path d="M72 16 Q98 28 90 50" fill="none" stroke="#4FC3F7" stroke-width="5" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "EyesClosed",
+    name: "Eyes Closed",
+    svg: `<svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="42" fill="#FFD54F" stroke="#111111" stroke-width="6"/><path d="M22 46 Q30 36 38 46" fill="none" stroke="#111111" stroke-width="6" stroke-linecap="round"/><path d="M62 46 Q70 36 78 46" fill="none" stroke="#111111" stroke-width="6" stroke-linecap="round"/><path d="M32 66 Q50 78 68 66" fill="none" stroke="#111111" stroke-width="6" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "Crewmate",
+    name: "Crewmate",
+    svg: `<svg viewBox="0 0 100 100"><circle cx="38" cy="30" r="16" fill="#4FC3F7" stroke="#111111" stroke-width="5"/><path d="M12 78 Q12 54 38 54 Q50 54 57 61" fill="#4FC3F7" stroke="#111111" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="62" cy="32" r="16" fill="#4FC3F7" stroke="#111111" stroke-width="5"/><path d="M38 82 Q38 58 62 58 Q86 58 86 82" fill="#4FC3F7" stroke="#111111" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+  },
+  {
+    id: "Detective",
+    name: "Detective",
+    svg: `<svg viewBox="0 0 100 100"><circle cx="38" cy="38" r="28" fill="#FF2D78" stroke="#111111" stroke-width="8"/><circle cx="38" cy="38" r="18" fill="white"/><circle cx="32" cy="36" r="4" fill="#111111"/><circle cx="44" cy="36" r="4" fill="#111111"/><path d="M30 46 Q38 52 46 46" fill="none" stroke="#111111" stroke-width="3.5" stroke-linecap="round"/><line x1="60" y1="60" x2="92" y2="92" stroke="#111111" stroke-width="18" stroke-linecap="round"/><line x1="60" y1="60" x2="92" y2="92" stroke="#FFD54F" stroke-width="10" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "Speaker",
+    name: "Speaker",
+    svg: `<svg viewBox="0 0 100 100"><path d="M10 38 L10 62 L34 62 L62 82 L62 18 L34 38 Z" fill="#FF2D78" stroke="#111111" stroke-width="6" stroke-linejoin="round"/><path d="M70 38 Q82 50 70 62" fill="none" stroke="#111111" stroke-width="9" stroke-linecap="round"/><path d="M70 38 Q82 50 70 62" fill="none" stroke="#FFD54F" stroke-width="5" stroke-linecap="round"/><path d="M80 28 Q98 50 80 72" fill="none" stroke="#111111" stroke-width="9" stroke-linecap="round"/><path d="M80 28 Q98 50 80 72" fill="none" stroke="#FFD54F" stroke-width="5" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "Medal1",
+    name: "Medal #1",
+    variant: "Gold",
+    svg: `<svg viewBox="0 0 100 100"><path d="M38 55 L26 82" fill="none" stroke="#111111" stroke-width="10" stroke-linecap="round"/><path d="M38 55 L26 82" fill="none" stroke="#FFD54F" stroke-width="6" stroke-linecap="round"/><path d="M62 55 L74 82" fill="none" stroke="#111111" stroke-width="10" stroke-linecap="round"/><path d="M62 55 L74 82" fill="none" stroke="#FFD54F" stroke-width="6" stroke-linecap="round"/><circle cx="50" cy="40" r="32" fill="#FFD54F" stroke="#111111" stroke-width="6"/><text x="50" y="52" text-anchor="middle" fill="#111111" font-size="36" font-weight="900" font-family="sans-serif">1</text></svg>`
+  },
+  {
+    id: "Medal2",
+    name: "Medal #2",
+    variant: "Silver",
+    svg: `<svg viewBox="0 0 100 100"><path d="M38 55 L26 82" fill="none" stroke="#111111" stroke-width="10" stroke-linecap="round"/><path d="M38 55 L26 82" fill="none" stroke="#4FC3F7" stroke-width="6" stroke-linecap="round"/><path d="M62 55 L74 82" fill="none" stroke="#111111" stroke-width="10" stroke-linecap="round"/><path d="M62 55 L74 82" fill="none" stroke="#4FC3F7" stroke-width="6" stroke-linecap="round"/><circle cx="50" cy="40" r="32" fill="#4FC3F7" stroke="#111111" stroke-width="6"/><text x="50" y="52" text-anchor="middle" fill="#111111" font-size="36" font-weight="900" font-family="sans-serif">2</text></svg>`
+  },
+  {
+    id: "Medal3",
+    name: "Medal #3",
+    variant: "Bronze",
+    svg: `<svg viewBox="0 0 100 100"><path d="M38 55 L26 82" fill="none" stroke="#111111" stroke-width="10" stroke-linecap="round"/><path d="M38 55 L26 82" fill="none" stroke="#69F0AE" stroke-width="6" stroke-linecap="round"/><path d="M62 55 L74 82" fill="none" stroke="#111111" stroke-width="10" stroke-linecap="round"/><path d="M62 55 L74 82" fill="none" stroke="#69F0AE" stroke-width="6" stroke-linecap="round"/><circle cx="50" cy="40" r="32" fill="#69F0AE" stroke="#111111" stroke-width="6"/><text x="50" y="52" text-anchor="middle" fill="#111111" font-size="36" font-weight="900" font-family="sans-serif">3</text></svg>`
+  },
+];
+
+const gameIcons = [
+  {
+    id: "ImpostorGameIcon",
+    name: "Impostor Icon",
+    svg: `<svg viewBox="0 0 100 100"><path d="M22 62 Q16 78 16 94 L84 94 Q84 78 78 62 Z" fill="#FF2D78" stroke="#111111" stroke-width="5" stroke-linejoin="round"/><circle cx="50" cy="36" r="24" fill="#FF2D78" stroke="#111111" stroke-width="5"/><circle cx="41" cy="34" r="5" fill="white"/><circle cx="41.5" cy="35" r="2.5" fill="#111111"/><circle cx="59" cy="34" r="5" fill="white"/><circle cx="59.5" cy="35" r="2.5" fill="#111111"/></svg>`
+  },
+  {
+    id: "TabooGameIcon",
+    name: "Taboo Icon",
+    svg: `<svg viewBox="0 0 100 100"><polygon points="18,76 38,76 22,97" fill="#FFD54F"/><rect x="8" y="8" width="84" height="68" rx="16" fill="#FFD54F" stroke="#111111" stroke-width="5"/><line x1="18" y1="75" x2="22" y2="97" stroke="#111111" stroke-width="5" stroke-linecap="round"/><line x1="38" y1="75" x2="22" y2="97" stroke="#111111" stroke-width="5" stroke-linecap="round"/><line x1="28" y1="24" x2="72" y2="60" stroke="#111111" stroke-width="14" stroke-linecap="round"/><line x1="72" y1="24" x2="28" y2="60" stroke="#111111" stroke-width="14" stroke-linecap="round"/><line x1="28" y1="24" x2="72" y2="60" stroke="#FF2D78" stroke-width="9" stroke-linecap="round"/><line x1="72" y1="24" x2="28" y2="60" stroke="#FF2D78" stroke-width="9" stroke-linecap="round"/></svg>`
+  },
+  {
+    id: "WavelengthGameIcon",
+    name: "Wavelength Icon",
+    svg: `<svg viewBox="0 0 100 100"><path d="M14 68 A36 36 0 0 1 86 68" fill="none" stroke="#111111" stroke-width="18" stroke-linecap="round"/><path d="M14 68 A36 36 0 0 1 86 68" fill="none" stroke="#4FC3F7" stroke-width="12" stroke-linecap="round"/><path d="M14 68 A36 36 0 0 1 69 35" fill="none" stroke="#111111" stroke-width="18" stroke-linecap="round"/><path d="M14 68 A36 36 0 0 1 69 35" fill="none" stroke="#FFD54F" stroke-width="12" stroke-linecap="round"/><line x1="50" y1="68" x2="69" y2="35" stroke="#111111" stroke-width="11" stroke-linecap="round"/><line x1="50" y1="68" x2="69" y2="35" stroke="#FF2D78" stroke-width="7" stroke-linecap="round"/><circle cx="50" cy="68" r="11" fill="#111111"/><circle cx="50" cy="68" r="5" fill="white"/></svg>`
+  },
+];
+
+const liked = new Set();
+
+function renderGrid() {
+  const grid = document.getElementById("grid");
+
+  const allSections = [
+    { label: null, items: icons },
+    { label: "Game Icons", items: gameIcons }
+  ];
+
+  let html = "";
+  allSections.forEach(({ label, items }, si) => {
+    if (label) {
+      html += `<div class="section-label" style="grid-column:1/-1;margin-top:${si===0?0:32}px">${label}</div>`;
+    }
+    items.forEach(icon => {
+      html += `
+        <div class="card" id="card-${icon.id}" onclick="toggle('${icon.id}', '${icon.name}')">
+          <div class="check-badge">✓</div>
+          <div class="card-icon">${icon.svg}</div>
+          <div class="card-name">${icon.name}</div>
+          ${icon.variant ? `<div class="variant-label">${icon.variant}</div>` : ""}
+        </div>`;
+    });
+  });
+
+  grid.innerHTML = html;
+}
+
+function toggle(id, name) {
+  if (liked.has(id)) {
+    liked.delete(id);
+    document.getElementById("card-" + id).classList.remove("liked");
+  } else {
+    liked.add(id);
+    document.getElementById("card-" + id).classList.add("liked");
+  }
+  updateCounter();
+  updateSummary();
+}
+
+function updateCounter() {
+  const el = document.getElementById("counter");
+  const n = liked.size;
+  el.textContent = n === 0 ? "0 liked" : n === 1 ? "1 liked" : `${n} liked`;
+}
+
+function updateSummary() {
+  const panel = document.getElementById("summary");
+  const list = document.getElementById("summaryList");
+  if (liked.size === 0) {
+    panel.classList.remove("visible");
+    return;
+  }
+  panel.classList.add("visible");
+  const allIcons = [...icons, ...gameIcons];
+  list.innerHTML = [...liked].map(id => {
+    const icon = allIcons.find(i => i.id === id);
+    return `<span class="summary-chip">${icon ? icon.name : id}</span>`;
+  }).join("");
+}
+
+function clearAll() {
+  liked.clear();
+  document.querySelectorAll(".card.liked").forEach(c => c.classList.remove("liked"));
+  updateCounter();
+  updateSummary();
+}
+
+function selectAll() {
+  [...icons, ...gameIcons].forEach(icon => {
+    liked.add(icon.id);
+    const card = document.getElementById("card-" + icon.id);
+    if (card) card.classList.add("liked");
+  });
+  updateCounter();
+  updateSummary();
+}
+
+renderGrid();
+</script>
+</body>
+</html>

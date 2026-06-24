@@ -11,6 +11,7 @@ import { useRouter } from "expo-router";
 import { Button } from "../../../../src/components/Button";
 import { palette, spacing, typography } from "../../../../src/theme";
 import { joinRoom } from "../../../../src/firebase/rooms";
+import { ArrowLeftIcon } from "../../../../src/assets/icons/ArrowLeftIcon";
 
 const ACCENT = palette.impostor;
 
@@ -46,7 +47,10 @@ export default function JoinScreen() {
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <Pressable style={styles.back} onPress={() => router.back()}>
-          <Text style={styles.backText}>‹ Back</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <ArrowLeftIcon size={18} />
+            <Text style={styles.backText}>Back</Text>
+          </View>
         </Pressable>
 
         <Text style={styles.title}>Join a Room</Text>
