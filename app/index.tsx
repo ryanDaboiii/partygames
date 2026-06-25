@@ -35,6 +35,7 @@ import { ChartIcon } from "../src/assets/icons/ChartIcon";
 import { ArrowRightIcon } from "../src/assets/icons/ArrowRightIcon";
 import { ArrowLeftIcon } from "../src/assets/icons/ArrowLeftIcon";
 import { XIcon } from "../src/assets/icons/XIcon";
+import { useGameMusic } from "../src/hooks/useGameMusic";
 
 type Step =
   | "choose"
@@ -45,6 +46,7 @@ type Step =
   | "offline";
 
 export default function LandingScreen() {
+  useGameMusic("menu");
   const router = useRouter();
   const mode = useSessionStore((s) => s.mode);
   const setSession = useSessionStore((s) => s.setSession);
@@ -508,11 +510,15 @@ export default function LandingScreen() {
               />
             </FormSection>
 
-            {joinError && (
+            {joinError === "NAME_TAKEN" ? (
+              <Text style={styles.nameTakenError}>
+                That name is already taken in this session. Please choose a different name.
+              </Text>
+            ) : joinError ? (
               <View style={styles.errorBox}>
                 <Text style={styles.errorBoxText}>{joinError}</Text>
               </View>
-            )}
+            ) : null}
 
             <Button
               label="Join Session"
@@ -882,5 +888,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   errorBoxText: { ...typography.caption, color: palette.danger },
+  nameTakenError: { color: "#FF2D78", fontSize: 13, marginTop: 6 },
   submitBtn: { marginTop: spacing.lg },
 });

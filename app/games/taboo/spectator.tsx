@@ -9,11 +9,12 @@ import {
 import { useRouter } from "expo-router";
 import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useSessionStore } from "../../../src/store/session";
-import { subscribeToSession, type SessionData } from "../../../src/firebase/sessions";
+import { subscribeToSession, setReturnedToLobby, type SessionData } from "../../../src/firebase/sessions";
+import { auth } from "../../../src/firebase/config";
 import { BanIcon } from "../../../src/assets/icons/BanIcon";
 import { WaitingDotsIcon } from "../../../src/assets/icons/WaitingDotsIcon";
 import { BackButton } from "../../../src/components/BackButton";
-import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
+import { LeaveGameDialog } from "../../../src/components/LeaveGameDialog";
 import { getGameTheme } from "../../../src/games/registry";
 
 const GAME_THEME = getGameTheme("taboo");
@@ -37,6 +38,12 @@ export default function TabooSpectatorScreen() {
     if (!sessionCode || mode !== "online") return;
     return subscribeToSession(sessionCode, (data) => {
       if (data.ended) return;
+      // Kick detection
+      const uid = auth.currentUser?.uid;
+      if (uid && !data.players[uid]) {
+        router.replace("/");
+        return;
+      }
       setSession(data);
       // Navigate back to hub when game ends
       if (!data.currentGame || data.gameStatus !== "in-progress") {
@@ -44,6 +51,15 @@ export default function TabooSpectatorScreen() {
       }
     });
   }, [sessionCode, mode]);
+
+  const handleLeave = async () => {
+    setShowExitDialog(false);
+    const uid = auth.currentUser?.uid;
+    if (sessionCode && uid) {
+      try { await setReturnedToLobby(sessionCode, uid); } catch {}
+    }
+    router.replace("/hub");
+  };
 
   const players = session
     ? Object.entries(session.players).map(([uid, p]) => ({
@@ -55,10 +71,9 @@ export default function TabooSpectatorScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
-      <ExitGameDialog
+      <LeaveGameDialog
         visible={showExitDialog}
-        onKeepScores={() => { setShowExitDialog(false); router.replace('/hub'); }}
-        onVoidPoints={() => { setShowExitDialog(false); router.replace('/hub'); }}
+        onLeave={handleLeave}
         onCancel={() => setShowExitDialog(false)}
       />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>

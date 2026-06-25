@@ -6,6 +6,7 @@ import {
   onSnapshot,
   serverTimestamp,
   increment,
+  deleteField,
   Timestamp,
 } from "firebase/firestore";
 import { db } from "./config";
@@ -29,6 +30,8 @@ export interface ActiveGame {
 export interface SessionPlayer {
   name: string;
   totalScore?: number;
+  pendingRemoval?: boolean;
+  returnedToLobby?: boolean;
 }
 
 export interface SessionImpostorGame {
@@ -92,9 +95,29 @@ export async function joinOnlineSession(
   const snap = await getDoc(sessionRef);
   if (!snap.exists()) throw new Error("Session not found — check the code and try again.");
 
-  await updateDoc(sessionRef, {
-    [`players.${user.uid}`]: { name: playerName },
-  });
+  const data = snap.data() as SessionData | undefined;
+  const existingPlayers = data?.players ?? {};
+  const isRejoining = !!existingPlayers[user.uid];
+
+  const nameTaken = Object.entries(existingPlayers).some(
+    ([existingUid, p]) =>
+      existingUid !== user.uid &&
+      (p as SessionPlayer).name.toLowerCase().trim() === playerName.toLowerCase().trim()
+  );
+  if (nameTaken) throw new Error("NAME_TAKEN");
+
+  if (isRejoining) {
+    // Returning player — update name, flag as returned to lobby, keep score and other fields
+    await updateDoc(sessionRef, {
+      [`players.${user.uid}.name`]: playerName,
+      [`players.${user.uid}.returnedToLobby`]: true,
+    });
+  } else {
+    // New player — fresh entry
+    await updateDoc(sessionRef, {
+      [`players.${user.uid}`]: { name: playerName, totalScore: 0 },
+    });
+  }
 
   return { playerUid: user.uid };
 }
@@ -285,4 +308,68 @@ export async function addPointsOnline(
   await updateDoc(doc(db, "sessions", sessionCode), {
     [`players.${playerUid}.totalScore`]: increment(points),
   });
+}
+
+// ── Player kick / removal ──────────────────────────────────────────────────
+
+export async function setPendingRemoval(
+  sessionCode: string,
+  uid: string
+): Promise<void> {
+  await updateDoc(doc(db, "sessions", sessionCode), {
+    [`players.${uid}.pendingRemoval`]: true,
+  });
+}
+
+export async function setReturnedToLobby(
+  sessionCode: string,
+  uid: string
+): Promise<void> {
+  await updateDoc(doc(db, "sessions", sessionCode), {
+    [`players.${uid}.returnedToLobby`]: true,
+  });
+}
+
+export async function clearReturnedToLobby(
+  sessionCode: string,
+  uid: string
+): Promise<void> {
+  await updateDoc(doc(db, "sessions", sessionCode), {
+    [`players.${uid}.returnedToLobby`]: deleteField(),
+  });
+}
+
+export async function clearPendingRemoval(
+  sessionCode: string,
+  uid: string
+): Promise<void> {
+  await updateDoc(doc(db, "sessions", sessionCode), {
+    [`players.${uid}.pendingRemoval`]: deleteField(),
+  });
+}
+
+export async function kickPlayer(
+  sessionCode: string,
+  uid: string
+): Promise<{ gameEnded: boolean }> {
+  await updateDoc(doc(db, "sessions", sessionCode), {
+    [`players.${uid}`]: deleteField(),
+  });
+
+  const snap = await getDoc(doc(db, "sessions", sessionCode));
+  const data = snap.data() as SessionData | undefined;
+  if (!data) return { gameEnded: false };
+
+  const remaining = Object.keys(data.players ?? {}).length;
+  const minimums: Record<string, number> = { impostor: 3, wavelength: 2, taboo: 2 };
+  const currentGame = data.currentGame;
+
+  if (currentGame && minimums[currentGame] !== undefined && remaining < minimums[currentGame]) {
+    await updateDoc(doc(db, "sessions", sessionCode), {
+      currentGame: null,
+      gameStatus: "selecting",
+    });
+    return { gameEnded: true };
+  }
+  return { gameEnded: false };
 }

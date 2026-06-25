@@ -20,11 +20,22 @@ import { Button } from "../src/components/Button";
 import { palette, spacing, typography, shadows } from "../src/theme";
 import { usePlayerStore } from "../src/store/players";
 import { useSessionStore } from "../src/store/session";
-import { subscribeToSession, endOnlineSession, type SessionData } from "../src/firebase/sessions";
+import {
+  subscribeToSession,
+  endOnlineSession,
+  kickPlayer,
+  setPendingRemoval,
+  clearPendingRemoval,
+  clearReturnedToLobby,
+  type SessionData,
+} from "../src/firebase/sessions";
+import { auth } from "../src/firebase/config";
 import { PartyIcon } from "../src/assets/icons/PartyIcon";
 import { HourglassIcon } from "../src/assets/icons/HourglassIcon";
 import { MedalIcon } from "../src/assets/icons/MedalIcon";
 import { SparkleIcon } from "../src/assets/icons/SparkleIcon";
+import { XIcon } from "../src/assets/icons/XIcon";
+import { useGameMusic } from "../src/hooks/useGameMusic";
 
 const ACCENT = palette.wavelength;
 
@@ -35,6 +46,7 @@ function getInitials(name: string): string {
 }
 
 export default function HubScreen() {
+  useGameMusic("menu");
   const router = useRouter();
   const mode = useSessionStore((s) => s.mode);
   const sessionCode = useSessionStore((s) => s.sessionCode);
@@ -57,6 +69,13 @@ export default function HubScreen() {
   const isFirstCallbackRef = useRef(true);
   const lastNavigatedGameRef = useRef<string | null>(null);
 
+  const [pendingKick, setPendingKick] = useState<{ uid: string; name: string } | null>(null);
+  const pendingKickRef = useRef<string | null>(null);
+  const pendingKickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [returnedToLobbyPlayer, setReturnedToLobbyPlayer] = useState<{ uid: string; name: string } | null>(null);
+  const returnedToLobbyRef = useRef<string | null>(null);
+
   // ── Online session subscription ────────────────────────────────────────────
   useEffect(() => {
     if (mode !== "online" || !sessionCode) return;
@@ -66,9 +85,52 @@ export default function HubScreen() {
     return subscribeToSession(sessionCode, (data: SessionData) => {
       if (data.ended) return; // handled globally by SessionEndWatcher in _layout.tsx
 
+      // Kick detection: non-host was removed from session
+      const currentUid = auth.currentUser?.uid;
+      if (!isHost && currentUid && data.players && !data.players[currentUid]) {
+        resetAll();
+        clearSession();
+        Alert.alert("Removed", "You have been removed from the session.", [
+          { text: "OK", onPress: () => router.replace("/") },
+        ]);
+        return;
+      }
+
       setLiveSession(data);
 
-      if (isHost) return; // host doesn't auto-navigate
+      if (isHost) {
+        // Check for a player with pendingRemoval to show the kick banner
+        const pending = Object.entries(data.players).find(
+          ([uid, p]) => p.pendingRemoval && uid !== data.hostId
+        );
+        if (pending) {
+          const [uid, p] = pending;
+          if (uid !== pendingKickRef.current) {
+            pendingKickRef.current = uid;
+            setPendingKick({ uid, name: p.name });
+          }
+        } else if (pendingKickRef.current) {
+          pendingKickRef.current = null;
+          setPendingKick(null);
+        }
+
+        // Check for a player who returned to lobby mid-game
+        const returned = Object.entries(data.players).find(
+          ([uid, p]) => p.returnedToLobby && uid !== data.hostId
+        );
+        if (returned) {
+          const [uid, p] = returned;
+          if (uid !== returnedToLobbyRef.current) {
+            returnedToLobbyRef.current = uid;
+            setReturnedToLobbyPlayer({ uid, name: p.name });
+          }
+        } else if (returnedToLobbyRef.current) {
+          returnedToLobbyRef.current = null;
+          setReturnedToLobbyPlayer(null);
+        }
+
+        return;
+      }
 
       const game = data.currentGame;
       const isActive = game && data.gameStatus === "in-progress";
@@ -89,6 +151,35 @@ export default function HubScreen() {
       }
     });
   }, [mode, sessionCode, isHost]);
+
+  // Auto-dismiss kick banner after 15 seconds (Keep behaviour)
+  useEffect(() => {
+    if (!pendingKick) return;
+    if (pendingKickTimerRef.current) clearTimeout(pendingKickTimerRef.current);
+    pendingKickTimerRef.current = setTimeout(async () => {
+      if (sessionCode && pendingKick) {
+        try { await clearPendingRemoval(sessionCode, pendingKick.uid); } catch {}
+      }
+      pendingKickRef.current = null;
+      setPendingKick(null);
+    }, 15000);
+    return () => {
+      if (pendingKickTimerRef.current) clearTimeout(pendingKickTimerRef.current);
+    };
+  }, [pendingKick?.uid]);
+
+  // Auto-dismiss "returned to lobby" toast after 4 seconds
+  useEffect(() => {
+    if (!returnedToLobbyPlayer) return;
+    const timer = setTimeout(async () => {
+      if (sessionCode) {
+        try { await clearReturnedToLobby(sessionCode, returnedToLobbyPlayer.uid); } catch {}
+      }
+      returnedToLobbyRef.current = null;
+      setReturnedToLobbyPlayer(null);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [returnedToLobbyPlayer?.uid]);
 
   // ── Navigation guard ───────────────────────────────────────────────────────
   if (!mode) return <Redirect href="/" />;
@@ -128,7 +219,15 @@ export default function HubScreen() {
   };
 
   const handleLeaveSession = () => {
-    const doLeave = () => { resetAll(); clearSession(); router.replace("/"); };
+    const doLeave = async () => {
+      const uid = auth.currentUser?.uid;
+      if (sessionCode && uid) {
+        try { await setPendingRemoval(sessionCode, uid); } catch {}
+      }
+      resetAll();
+      clearSession();
+      router.replace("/");
+    };
     if (Platform.OS === "web") {
       if (window.confirm("Leave this session?")) doLeave();
       return;
@@ -166,6 +265,49 @@ export default function HubScreen() {
       { text: "Cancel", style: "cancel" },
       { text: "Remove", style: "destructive", onPress: () => removePlayer(id) },
     ]);
+  };
+
+  const handleKickOnlinePlayer = (uid: string, name: string) => {
+    Alert.alert("Remove player?", `Remove ${name} from the session?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          if (!sessionCode) return;
+          try {
+            const result = await kickPlayer(sessionCode, uid);
+            if (result.gameEnded) Alert.alert("Game ended", "Not enough players to continue.");
+          } catch (e: any) {
+            Alert.alert("Error", e.message ?? "Could not remove player.");
+          }
+        },
+      },
+    ]);
+  };
+
+  const handlePlayerPress = (uid: string, name: string, isHostPlayer: boolean) => {
+    if (!isHost || isHostPlayer) return;
+    Alert.alert(
+      name,
+      null,
+      [
+        {
+          text: "Kick player",
+          style: "destructive",
+          onPress: async () => {
+            if (!sessionCode) return;
+            try {
+              const result = await kickPlayer(sessionCode, uid);
+              if (result.gameEnded) Alert.alert("Game ended", "Not enough players to continue.");
+            } catch (e: any) {
+              Alert.alert("Error", e.message ?? "Could not remove player.");
+            }
+          },
+        },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
   };
 
   // ── Online session player list (from Firestore) ────────────────────────────
@@ -291,6 +433,51 @@ export default function HubScreen() {
   // ════════════════════════════════════════════════════════════════════════════
   return (
     <SafeAreaView style={styles.safe}>
+      {pendingKick && (
+        <View style={styles.kickBanner}>
+          <Text style={styles.kickBannerTitle}>
+            {pendingKick.name} left the session
+          </Text>
+          <Text style={styles.kickBannerSubtitle}>
+            Remove them to clear them from the leaderboard and future games, or keep them in case they rejoin.
+          </Text>
+          <View style={styles.kickBannerButtons}>
+            <Pressable
+              style={styles.kickBannerRemove}
+              onPress={async () => {
+                const { uid } = pendingKick;
+                pendingKickRef.current = null;
+                setPendingKick(null);
+                if (!sessionCode) return;
+                try {
+                  const result = await kickPlayer(sessionCode, uid);
+                  if (result.gameEnded) Alert.alert("Game ended", "Not enough players to continue.");
+                } catch {}
+              }}
+            >
+              <Text style={styles.kickBannerRemoveText}>Remove from session</Text>
+            </Pressable>
+            <Pressable
+              style={styles.kickBannerKeep}
+              onPress={async () => {
+                const { uid } = pendingKick;
+                pendingKickRef.current = null;
+                setPendingKick(null);
+                if (sessionCode) try { await clearPendingRemoval(sessionCode, uid); } catch {}
+              }}
+            >
+              <Text style={styles.kickBannerKeepText}>Keep (they may rejoin)</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+      {returnedToLobbyPlayer && (
+        <View style={styles.returnedToast}>
+          <Text style={styles.returnedToastText}>
+            {returnedToLobbyPlayer.name} has returned to the lobby
+          </Text>
+        </View>
+      )}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.container}
@@ -341,7 +528,7 @@ export default function HubScreen() {
                 <Pressable
                   key={uid}
                   style={({ pressed }) => [styles.playerChip, pressed && styles.chipPressed]}
-                  onPress={() => isHost && handleRemovePlayer(uid, name)}
+                  onPress={() => handlePlayerPress(uid, name, isHostPlayer)}
                   disabled={!isHost}
                 >
                   <View style={styles.avatar}>
@@ -572,6 +759,53 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   endSessionBtn: { marginTop: spacing.xl },
+
+  // ── Kick notification banner ───────────────────────────────────────────────
+  kickBanner: {
+    position: "absolute" as const,
+    bottom: 32,
+    left: 16,
+    right: 16,
+    zIndex: 999,
+    backgroundColor: "#1a0010",
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: "#FF2D78",
+    padding: 16,
+    gap: spacing.sm,
+  },
+  kickBannerTitle: { ...typography.bodyBold, color: palette.white },
+  kickBannerSubtitle: { fontSize: 13, color: "#FFB3CC", lineHeight: 18 },
+  kickBannerButtons: { gap: spacing.sm, marginTop: spacing.xs },
+  kickBannerRemove: {
+    backgroundColor: "#FF2D78",
+    borderRadius: 10,
+    paddingVertical: spacing.md,
+    alignItems: "center" as const,
+  },
+  kickBannerRemoveText: { ...typography.bodyBold, color: palette.white },
+  kickBannerKeep: {
+    backgroundColor: "transparent",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#FF2D78" + "66",
+    paddingVertical: spacing.md,
+    alignItems: "center" as const,
+  },
+  kickBannerKeepText: { ...typography.body, color: "#FFB3CC" },
+
+  // ── Returned-to-lobby toast ────────────────────────────────────────────────
+  returnedToast: {
+    position: "absolute" as const,
+    bottom: 32,
+    alignSelf: "center" as const,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    borderRadius: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    zIndex: 999,
+  },
+  returnedToastText: { ...typography.body, color: palette.white },
 
   // ── Non-host waiting screen ────────────────────────────────────────────────
   codeBannerLarge: {

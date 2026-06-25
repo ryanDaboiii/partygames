@@ -22,8 +22,15 @@ import {
   revealImpostorResult,
   clearImpostorSession,
   clearSessionCurrentGame,
+  setReturnedToLobby,
+  kickPlayer,
+  clearPendingRemoval,
   type SessionData,
 } from "../../../../src/firebase/sessions";
+import { LeaveGameDialog } from "../../../../src/components/LeaveGameDialog";
+import { KickPlayerModal } from "../../../../src/components/KickPlayerModal";
+import { BackButton } from "../../../../src/components/BackButton";
+import { ExitGameDialog } from "../../../../src/components/ExitGameDialog";
 import { useSessionStore } from "../../../../src/store/session";
 import { usePlayerStore } from "../../../../src/store/players";
 import type { PlayerRole } from "../../../../src/games/impostor/types";
@@ -80,6 +87,8 @@ export default function OnlinePlayScreen() {
   const [myRole, setMyRole] = useState<MyRole | null>(null);
   const [myUid, setMyUid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showExitDialog, setShowExitDialog] = useState(false);
+  const [showPlayerModal, setShowPlayerModal] = useState(false);
 
   // App-mode: which player this device tapped before submitting
   const [selectedVoteTarget, setSelectedVoteTarget] = useState<string | null>(null);
@@ -101,8 +110,16 @@ export default function OnlinePlayScreen() {
   // Subscribe to session document
   useEffect(() => {
     if (!sessionCode) return;
-    return subscribeToSession(sessionCode, setSession);
-  }, [sessionCode]);
+    return subscribeToSession(sessionCode, (data) => {
+      if (myUid && !data.players[myUid]) {
+        Alert.alert("Removed", "You have been removed from the session.", [
+          { text: "OK", onPress: () => router.replace("/") },
+        ]);
+        return;
+      }
+      setSession(data);
+    });
+  }, [sessionCode, myUid]);
 
   // Subscribe to own private role doc
   useEffect(() => {
@@ -246,6 +263,14 @@ export default function OnlinePlayScreen() {
     }
   };
 
+  const handleNonHostLeave = async () => {
+    setShowExitDialog(false);
+    if (sessionCode && myUid) {
+      try { await setReturnedToLobby(sessionCode, myUid); } catch {}
+    }
+    router.replace("/hub");
+  };
+
   const handleHostBackToHub = async () => {
     if (sessionCode) {
       try {
@@ -256,6 +281,76 @@ export default function OnlinePlayScreen() {
     router.replace("/hub");
   };
 
+  // ── Exit / leave / kick UI ────────────────────────────────
+
+  const exitDialog = isHost ? (
+    <ExitGameDialog
+      visible={showExitDialog}
+      onKeepScores={handleHostBackToHub}
+      onVoidPoints={handleHostBackToHub}
+      onCancel={() => setShowExitDialog(false)}
+    />
+  ) : (
+    <LeaveGameDialog
+      visible={showExitDialog}
+      onLeave={handleNonHostLeave}
+      onCancel={() => setShowExitDialog(false)}
+    />
+  );
+
+  const backBtn = <BackButton onPress={() => setShowExitDialog(true)} color={ACCENT} />;
+
+  const handleKickFromModal = async (uid: string) => {
+    setShowPlayerModal(false);
+    if (!sessionCode) return;
+    try {
+      const result = await kickPlayer(sessionCode, uid);
+      if (result.gameEnded) Alert.alert("Game ended", "Not enough players to continue.");
+    } catch {}
+  };
+
+  const pendingKickEntry = isHost
+    ? Object.entries(sessionPlayers).find(([uid, p]) => p.pendingRemoval && uid !== session?.hostId)
+    : null;
+
+  const kickBannerNode = pendingKickEntry ? (
+    <View style={styles.kickBanner}>
+      <Text style={styles.kickBannerText} numberOfLines={1}>
+        {pendingKickEntry[1].name} left the game
+      </Text>
+      <Pressable
+        style={styles.kickBannerRemove}
+        onPress={() => handleKickFromModal(pendingKickEntry[0])}
+      >
+        <Text style={styles.kickBannerBtnText}>Remove</Text>
+      </Pressable>
+      <Pressable
+        style={styles.kickBannerKeep}
+        onPress={async () => {
+          if (sessionCode) try { await clearPendingRemoval(sessionCode, pendingKickEntry[0]); } catch {}
+        }}
+      >
+        <Text style={styles.kickBannerBtnText}>Keep</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
+  const kickModal = (
+    <KickPlayerModal
+      visible={showPlayerModal}
+      players={Object.entries(sessionPlayers).map(([uid, p]) => ({ uid, name: p.name }))}
+      myUid={myUid}
+      onKick={handleKickFromModal}
+      onClose={() => setShowPlayerModal(false)}
+    />
+  );
+
+  const playersBtn = isHost ? (
+    <Pressable style={styles.playersBtn} onPress={() => setShowPlayerModal(true)}>
+      <CrewmateIcon size={20} />
+    </Pressable>
+  ) : null;
+
   // ── Loading / blank for post-game ─────────────────────────
 
   if (game !== null && game !== undefined) hadGameRef.current = true;
@@ -264,9 +359,12 @@ export default function OnlinePlayScreen() {
     if (hadGameRef.current) return null;
     return (
       <SafeAreaView style={styles.safe}>
+        {exitDialog}
+        {kickModal}
         <View style={styles.center}>
           <Text style={styles.loading}>Connecting…</Text>
         </View>
+        {backBtn}
       </SafeAreaView>
     );
   }
@@ -287,6 +385,9 @@ export default function OnlinePlayScreen() {
 
     return (
       <SafeAreaView style={styles.safe}>
+        {exitDialog}
+        {kickModal}
+        {kickBannerNode}
         <ScrollView contentContainerStyle={styles.container}>
           <Text style={styles.phase}>Discussion Phase</Text>
           <Text style={styles.title}>Time to talk!</Text>
@@ -343,6 +444,8 @@ export default function OnlinePlayScreen() {
             />
           )}
         </ScrollView>
+        {backBtn}
+        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -360,6 +463,9 @@ export default function OnlinePlayScreen() {
       if (isHost) {
         return (
           <SafeAreaView style={styles.safe}>
+            {exitDialog}
+            {kickModal}
+            {kickBannerNode}
             <ScrollView contentContainerStyle={styles.container}>
               <Text style={styles.phase}>Voting Phase</Text>
               <Text style={styles.title}>Who is eliminated?</Text>
@@ -399,6 +505,7 @@ export default function OnlinePlayScreen() {
                 style={{ marginTop: spacing.lg }}
               />
             </ScrollView>
+            {playersBtn}
           </SafeAreaView>
         );
       }
@@ -406,6 +513,8 @@ export default function OnlinePlayScreen() {
       // Non-host waiting (host mode)
       return (
         <SafeAreaView style={styles.safe}>
+          {exitDialog}
+          {kickModal}
           <View style={styles.center}>
             <BallotIcon size={56} />
             <Text style={styles.waitTitle}>Voting in Progress</Text>
@@ -413,6 +522,7 @@ export default function OnlinePlayScreen() {
               Waiting for the host to submit the result…
             </Text>
           </View>
+          {backBtn}
         </SafeAreaView>
       );
     }
@@ -424,6 +534,8 @@ export default function OnlinePlayScreen() {
       );
       return (
         <SafeAreaView style={styles.safe}>
+          {exitDialog}
+          {kickModal}
           <ScrollView contentContainerStyle={styles.container}>
             <Text style={styles.phase}>Voting Phase</Text>
             <Text style={styles.title}>Who is the impostor?</Text>
@@ -460,6 +572,7 @@ export default function OnlinePlayScreen() {
               style={{ marginTop: spacing.lg }}
             />
           </ScrollView>
+          {backBtn}
         </SafeAreaView>
       );
     }
@@ -467,6 +580,8 @@ export default function OnlinePlayScreen() {
     // App mode — waiting for others after vote submitted
     return (
       <SafeAreaView style={styles.safe}>
+        {exitDialog}
+        {kickModal}
         <View style={styles.center}>
           <CheckIcon size={56} />
           <Text style={styles.waitTitle}>Vote submitted!</Text>
@@ -484,6 +599,7 @@ export default function OnlinePlayScreen() {
             />
           )}
         </View>
+        {backBtn}
       </SafeAreaView>
     );
   }
@@ -511,6 +627,9 @@ export default function OnlinePlayScreen() {
 
     return (
       <SafeAreaView style={styles.safe}>
+        {exitDialog}
+        {kickModal}
+        {kickBannerNode}
         <ScrollView contentContainerStyle={styles.container}>
           <Text style={styles.phase}>Results</Text>
 
@@ -646,6 +765,8 @@ export default function OnlinePlayScreen() {
             </View>
           )}
         </ScrollView>
+        {backBtn}
+        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -655,6 +776,8 @@ export default function OnlinePlayScreen() {
   if (game.status === "ended") {
     return (
       <SafeAreaView style={styles.safe}>
+        {exitDialog}
+        {kickModal}
         <View style={styles.center}>
           <Text style={styles.loading}>
             {game.winner === "crewmates"
@@ -682,6 +805,48 @@ export default function OnlinePlayScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.bg },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl },
+
+  // ── Kick UI ─────────────────────────────────────────────────
+  kickBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: palette.bgCard,
+    borderBottomWidth: 2,
+    borderBottomColor: "#FF69B4",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  kickBannerText: { ...typography.body, color: palette.white, flex: 1 },
+  kickBannerRemove: {
+    backgroundColor: palette.danger,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  kickBannerKeep: {
+    backgroundColor: palette.bgCardElevated,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  kickBannerBtnText: { ...typography.caption, color: palette.white, fontWeight: "700" as const },
+  playersBtn: {
+    position: "absolute" as const,
+    top: spacing.lg,
+    right: spacing.lg,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: palette.bgCard,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+  },
   center: {
     flex: 1,
     alignItems: "center",

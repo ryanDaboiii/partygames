@@ -8,6 +8,7 @@ const tracks = {
   impostor: require("../../assets/sounds/impostorgamesoundtrack.m4a"),
   wavelength: require("../../assets/sounds/wavelengthsoundtrack.m4a"),
   taboo: require("../../assets/sounds/taboosoundtrack.m4a"),
+  menu: require("../../assets/sounds/mainmenumusic.m4a"),
 };
 
 export type GameMusicId = keyof typeof tracks;

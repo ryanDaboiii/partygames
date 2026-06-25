@@ -17,7 +17,14 @@ import { useSessionStore } from "../../../src/store/session";
 import { usePlayerStore } from "../../../src/store/players";
 import { ensureAnonymousAuth } from "../../../src/firebase/rooms";
 import { auth } from "../../../src/firebase/config";
-import { clearSessionCurrentGame } from "../../../src/firebase/sessions";
+import {
+  clearSessionCurrentGame,
+  subscribeToSession,
+  setReturnedToLobby,
+  kickPlayer,
+  clearPendingRemoval,
+  type SessionData,
+} from "../../../src/firebase/sessions";
 import {
   subscribeToWavelengthState,
   startWavelengthCluePhase,
@@ -33,6 +40,9 @@ import {
   type WavelengthFSAssignment,
 } from "../../../src/firebase/wavelength";
 import { addPointsOnline } from "../../../src/firebase/sessions";
+import { LeaveGameDialog } from "../../../src/components/LeaveGameDialog";
+import { KickPlayerModal } from "../../../src/components/KickPlayerModal";
+import { CrewmateIcon } from "../../../src/assets/icons/CrewmateIcon";
 import { CATEGORIES, pickCategories } from "../../../src/games/wavelength/categories";
 import { getGameTheme } from "../../../src/games/registry";
 import { BackButton } from "../../../src/components/BackButton";
@@ -65,10 +75,12 @@ export default function WavelengthOnlineScreen() {
   const scoringMode = useSessionStore((s) => s.scoringMode);
 
   const [state, setState] = useState<WavelengthFSState | null>(null);
+  const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [myUid, setMyUid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [myRevealed, setMyRevealed] = useState(false);
   const [guessValue, setGuessValue] = useState<number | null>(null);
+  const [showPlayerModal, setShowPlayerModal] = useState(false);
 
   const scoredRoundRef = useRef(-1);
 
@@ -92,6 +104,20 @@ export default function WavelengthOnlineScreen() {
     if (!sessionCode) return;
     return subscribeToWavelengthState(sessionCode, setState);
   }, [sessionCode]);
+
+  // Session subscription for kick detection and host kick banner
+  useEffect(() => {
+    if (!sessionCode) return;
+    return subscribeToSession(sessionCode, (data) => {
+      if (myUid && !data.players[myUid]) {
+        Alert.alert("Removed", "You have been removed from the session.", [
+          { text: "OK", onPress: () => router.replace("/") },
+        ]);
+        return;
+      }
+      setSessionData(data);
+    });
+  }, [sessionCode, myUid]);
 
   useEffect(() => {
     setMyRevealed(false);
@@ -144,19 +170,89 @@ export default function WavelengthOnlineScreen() {
     router.replace('/hub');
   };
 
-  const exitDialog = (
+  const handleNonHostLeave = async () => {
+    setShowExitDialog(false);
+    if (sessionCode && myUid) {
+      try { await setReturnedToLobby(sessionCode, myUid); } catch {}
+    }
+    router.replace("/hub");
+  };
+
+  const exitDialog = isHost ? (
     <ExitGameDialog
       visible={showExitDialog}
       onKeepScores={handleExitGame}
       onVoidPoints={handleExitGame}
       onCancel={() => setShowExitDialog(false)}
     />
+  ) : (
+    <LeaveGameDialog
+      visible={showExitDialog}
+      onLeave={handleNonHostLeave}
+      onCancel={() => setShowExitDialog(false)}
+    />
   );
+
   const backBtn = <BackButton onPress={() => setShowExitDialog(true)} color={GAME_THEME.accent} />;
+
+  const handleKickFromModal = async (uid: string) => {
+    setShowPlayerModal(false);
+    if (!sessionCode) return;
+    try {
+      const result = await kickPlayer(sessionCode, uid);
+      if (result.gameEnded) Alert.alert("Game ended", "Not enough players to continue.");
+    } catch {}
+  };
+
+  const sessionPlayers = sessionData?.players ?? {};
+
+  const pendingKickEntry = isHost
+    ? Object.entries(sessionPlayers).find(([uid, p]) => p.pendingRemoval && uid !== sessionData?.hostId)
+    : null;
+
+  const kickBannerNode = pendingKickEntry ? (
+    <View style={styles.kickBanner}>
+      <Text style={styles.kickBannerText} numberOfLines={1}>
+        {pendingKickEntry[1].name} left the game
+      </Text>
+      <Pressable
+        style={styles.kickBannerRemove}
+        onPress={() => handleKickFromModal(pendingKickEntry[0])}
+      >
+        <Text style={styles.kickBannerBtnText}>Remove</Text>
+      </Pressable>
+      <Pressable
+        style={styles.kickBannerKeep}
+        onPress={async () => {
+          if (sessionCode) try { await clearPendingRemoval(sessionCode, pendingKickEntry[0]); } catch {}
+        }}
+      >
+        <Text style={styles.kickBannerBtnText}>Keep</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
+  const kickModal = (
+    <KickPlayerModal
+      visible={showPlayerModal}
+      players={Object.entries(sessionPlayers).map(([uid, p]) => ({ uid, name: p.name }))}
+      myUid={myUid}
+      onKick={handleKickFromModal}
+      onClose={() => setShowPlayerModal(false)}
+    />
+  );
+
+  const playersBtn = isHost ? (
+    <Pressable style={styles.playersBtn} onPress={() => setShowPlayerModal(true)}>
+      <CrewmateIcon size={20} />
+    </Pressable>
+  ) : null;
 
   if (!state || !myUid) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
+        {kickModal}
+        {backBtn}
         <View style={styles.center}>
           <Text style={styles.loadingText}>Connecting…</Text>
         </View>
@@ -327,6 +423,8 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
+          {kickModal}
+          {kickBannerNode}
           <View style={styles.page}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
             <View style={styles.center}>
@@ -354,6 +452,7 @@ export default function WavelengthOnlineScreen() {
             )}
           </View>
           {backBtn}
+          {playersBtn}
         </SafeAreaView>
       );
     }
@@ -362,10 +461,12 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
+          {kickModal}
           <View style={styles.center}>
             <Text style={styles.loadingText}>Connecting…</Text>
           </View>
           {backBtn}
+          {playersBtn}
         </SafeAreaView>
       );
     }
@@ -373,6 +474,8 @@ export default function WavelengthOnlineScreen() {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
         {exitDialog}
+        {kickModal}
+        {kickBannerNode}
         <ScrollView contentContainerStyle={styles.scrollPage} showsVerticalScrollIndicator={false}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
 
@@ -426,6 +529,7 @@ export default function WavelengthOnlineScreen() {
           )}
         </ScrollView>
         {backBtn}
+        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -444,6 +548,8 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
+          {kickModal}
+          {kickBannerNode}
           <View style={styles.page}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
             <View style={styles.center}>
@@ -467,6 +573,8 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
+          {kickModal}
+          {kickBannerNode}
           <ScrollView contentContainerStyle={styles.scrollPage} showsVerticalScrollIndicator={false}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
             <View style={styles.myTurnBanner}>
@@ -506,6 +614,7 @@ export default function WavelengthOnlineScreen() {
             />
           </ScrollView>
           {backBtn}
+          {playersBtn}
         </SafeAreaView>
       );
     }
@@ -513,6 +622,8 @@ export default function WavelengthOnlineScreen() {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
         {exitDialog}
+        {kickModal}
+        {kickBannerNode}
         <View style={styles.page}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
           <View style={styles.center}>
@@ -528,6 +639,7 @@ export default function WavelengthOnlineScreen() {
           </View>
         </View>
         {backBtn}
+        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -539,6 +651,8 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
+          {kickModal}
+          {kickBannerNode}
           <View style={styles.page}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
             <View style={styles.center}>
@@ -573,6 +687,8 @@ export default function WavelengthOnlineScreen() {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
         {exitDialog}
+        {kickModal}
+        {kickBannerNode}
         <View style={styles.page}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
           <View style={styles.center}>
@@ -584,6 +700,7 @@ export default function WavelengthOnlineScreen() {
           </View>
         </View>
         {backBtn}
+        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -598,6 +715,7 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
+          {kickModal}
           <View style={styles.page}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
 
@@ -629,6 +747,7 @@ export default function WavelengthOnlineScreen() {
 
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
+        {kickModal}
         <View style={styles.page}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
           <View style={styles.center}>
@@ -652,6 +771,9 @@ export default function WavelengthOnlineScreen() {
 
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
+        {exitDialog}
+        {kickModal}
+        {kickBannerNode}
         <ScrollView contentContainerStyle={styles.scrollPage} showsVerticalScrollIndicator={false}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
 
@@ -747,6 +869,8 @@ export default function WavelengthOnlineScreen() {
             colors={["#4FC3F7", "#87D8FA", "#FFFFFF", "#A8DCEF"]}
           />
         )}
+        {backBtn}
+        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -869,6 +993,48 @@ function NumberScrollPicker({
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
+
+  // ── Kick UI ─────────────────────────────────────────────────
+  kickBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: palette.bgCard,
+    borderBottomWidth: 2,
+    borderBottomColor: "#FF69B4",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  kickBannerText: { ...typography.body, color: palette.white, flex: 1 },
+  kickBannerRemove: {
+    backgroundColor: palette.danger,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  kickBannerKeep: {
+    backgroundColor: palette.bgCardElevated,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  kickBannerBtnText: { ...typography.caption, color: palette.white, fontWeight: "700" as const },
+  playersBtn: {
+    position: "absolute" as const,
+    top: spacing.lg,
+    right: spacing.lg,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: palette.bgCard,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+  },
 
   page: {
     flex: 1,
