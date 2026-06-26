@@ -97,7 +97,7 @@ export default function WavelengthSetup() {
   const canStart = selectedCount >= MIN_PLAYERS;
 
   const handleStart = async () => {
-    if (!canStart) return;
+    if (!canStart || busy) return;
 
     if (mode === "online" && sessionCode && isHost) {
       const activePlayers = onlinePlayerList.filter((p) => selectedIds.has(p.uid));
@@ -144,8 +144,6 @@ export default function WavelengthSetup() {
         setBusy(false);
         return;
       }
-      setBusy(false);
-
       showThen(
         { icon: "📡", IconComponent: WavelengthIcon, title: "Wavelength", accentColor: ACCENT },
         () => router.push("/games/wavelength/online")
@@ -153,6 +151,7 @@ export default function WavelengthSetup() {
       return;
     }
 
+    setBusy(true);
     reset();
     const players: Player[] = roster
       .filter((p) => selectedIds.has(p.id))
@@ -182,6 +181,7 @@ export default function WavelengthSetup() {
           </Text>
         </View>
 
+        <View pointerEvents={busy ? "none" : "auto"} style={{ opacity: busy ? 0.5 : 1 }}>
         <Section label="Number range">
           <View style={styles.rangeRow}>
             <View style={styles.rangeLabel}>
@@ -282,6 +282,8 @@ export default function WavelengthSetup() {
           </View>
         )}
 
+        </View>
+
         <GameButton
           label={busy ? "Starting…" : "Start Game"}
           onPress={handleStart}
@@ -289,6 +291,7 @@ export default function WavelengthSetup() {
           textColor={GAME_THEME.text}
           fullWidth
           disabled={!canStart || busy}
+          loading={busy}
           style={styles.startBtn}
         />
       </ScrollView>

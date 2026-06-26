@@ -1,9 +1,13 @@
 import { Stack } from "expo-router";
+import { useEffect } from "react";
 import { palette } from "../../../src/theme";
-import { useGameMusic } from "../../../src/hooks/useGameMusic";
+import { stopMusic } from "../../../src/hooks/useGameMusic";
 
 export default function TabooLayout() {
-  useGameMusic("taboo");
+  useEffect(() => {
+    stopMusic();
+  }, []);
+
   return (
     <Stack
       screenOptions={{

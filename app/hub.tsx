@@ -35,8 +35,6 @@ import { HourglassIcon } from "../src/assets/icons/HourglassIcon";
 import { MedalIcon } from "../src/assets/icons/MedalIcon";
 import { SparkleIcon } from "../src/assets/icons/SparkleIcon";
 import { XIcon } from "../src/assets/icons/XIcon";
-import { useGameMusic } from "../src/hooks/useGameMusic";
-
 const ACCENT = palette.wavelength;
 
 function getInitials(name: string): string {
@@ -45,8 +43,11 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+function displayName(name: string): string {
+  return name.length > 8 ? name.slice(0, 8) + "…" : name;
+}
+
 export default function HubScreen() {
-  useGameMusic("menu");
   const router = useRouter();
   const mode = useSessionStore((s) => s.mode);
   const sessionCode = useSessionStore((s) => s.sessionCode);
@@ -66,9 +67,6 @@ export default function HubScreen() {
   // Online session live data (non-host uses this for player list & game routing)
   const [liveSession, setLiveSession] = useState<SessionData | null>(null);
 
-  const isFirstCallbackRef = useRef(true);
-  const lastNavigatedGameRef = useRef<string | null>(null);
-
   const [pendingKick, setPendingKick] = useState<{ uid: string; name: string } | null>(null);
   const pendingKickRef = useRef<string | null>(null);
   const pendingKickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -79,8 +77,6 @@ export default function HubScreen() {
   // ── Online session subscription ────────────────────────────────────────────
   useEffect(() => {
     if (mode !== "online" || !sessionCode) return;
-    isFirstCallbackRef.current = true;
-    lastNavigatedGameRef.current = null;
 
     return subscribeToSession(sessionCode, (data: SessionData) => {
       if (data.ended) return; // handled globally by SessionEndWatcher in _layout.tsx
@@ -132,23 +128,6 @@ export default function HubScreen() {
         return;
       }
 
-      const game = data.currentGame;
-      const isActive = game && data.gameStatus === "in-progress";
-
-      if (isFirstCallbackRef.current) {
-        isFirstCallbackRef.current = false;
-        // Record the current game so we don't re-navigate to an already-running game
-        if (isActive && game) lastNavigatedGameRef.current = game;
-        return;
-      }
-
-      // Navigate only when a genuinely new game starts (game id differs from last navigation).
-      // lastNavigatedGameRef is only reset on hub mount, so null callbacks from
-      // clearSessionCurrentGame during game setup don't re-arm the guard.
-      if (isActive && game && game !== lastNavigatedGameRef.current) {
-        lastNavigatedGameRef.current = game;
-        navigateToGame(game);
-      }
     });
   }, [mode, sessionCode, isHost]);
 
@@ -183,16 +162,6 @@ export default function HubScreen() {
 
   // ── Navigation guard ───────────────────────────────────────────────────────
   if (!mode) return <Redirect href="/" />;
-
-  // ── Helpers ────────────────────────────────────────────────────────────────
-  const navigateToGame = (gameId: string) => {
-    switch (gameId) {
-      case "impostor": router.push("/games/impostor/online/play"); break;
-      case "wavelength": router.push("/games/wavelength/online" as any); break;
-      case "taboo": router.push("/games/taboo/spectator" as any); break;
-      default: router.push("/game-in-progress" as any); break;
-    }
-  };
 
   const handleShareCode = () => {
     if (!sessionCode) return;
@@ -290,7 +259,7 @@ export default function HubScreen() {
     if (!isHost || isHostPlayer) return;
     Alert.alert(
       name,
-      null,
+      undefined,
       [
         {
           text: "Kick player",
@@ -413,6 +382,11 @@ export default function HubScreen() {
             )}
           </View>
 
+          <Text style={styles.waitingSubtitle}>
+            Questions?{'  /  '}
+            <Text style={styles.helpLink} onPress={() => router.push("/info")}>How to play</Text>
+          </Text>
+
           <Button
             label="Leave Session"
             onPress={handleLeaveSession}
@@ -422,7 +396,6 @@ export default function HubScreen() {
             style={styles.endSessionBtn}
           />
         </ScrollView>
-
 
       </SafeAreaView>
     );
@@ -490,7 +463,10 @@ export default function HubScreen() {
               <PartyIcon size={24} />
               <Text style={styles.appName}>Party Games</Text>
             </View>
-            <Text style={styles.subtitle}>Pick a game to play next</Text>
+            <Text style={styles.subtitle}>
+              Pick a game to play next{'  /  '}
+              <Text style={styles.helpLink} onPress={() => router.push("/info")}>Help</Text>
+            </Text>
           </View>
           {mode === "online" && sessionCode && (
             <Pressable onPress={handleShareCode} style={styles.codeBadge}>
@@ -535,14 +511,12 @@ export default function HubScreen() {
                     <Text style={styles.avatarText}>{getInitials(name)}</Text>
                   </View>
                   <View>
-                    <View style={styles.nameRow}>
-                      <Text style={styles.playerChipName} numberOfLines={1}>{name}</Text>
-                      {isHostPlayer && (
-                        <View style={styles.hostBadge}>
-                          <Text style={styles.hostBadgeText}>HOST</Text>
-                        </View>
-                      )}
-                    </View>
+                    <Text style={styles.playerChipName}>{displayName(name)}</Text>
+                    {isHostPlayer && (
+                      <View style={styles.hostBadge}>
+                        <Text style={styles.hostBadgeText}>HOST</Text>
+                      </View>
+                    )}
                   </View>
                 </Pressable>
               ))}
@@ -567,7 +541,7 @@ export default function HubScreen() {
                       <Text style={styles.avatarText}>{getInitials(p.name)}</Text>
                     </View>
                     <View>
-                      <Text style={styles.playerChipName} numberOfLines={1}>{p.name}</Text>
+                      <Text style={styles.playerChipName}>{displayName(p.name)}</Text>
                       <Text style={styles.playerScore}>{p.totalScore} pts</Text>
                     </View>
                   </Pressable>
@@ -678,6 +652,8 @@ const styles = StyleSheet.create({
   },
   appName: { ...typography.heading1, fontFamily: "HennyPenny_400Regular", color: palette.white, marginBottom: spacing.xs },
   subtitle: { ...typography.body, color: palette.muted },
+  helpLink: { color: "#4FC3F7", textDecorationLine: "underline" as const },
+  waitingSubtitle: { color: "#888", fontSize: 14, textAlign: "center", marginTop: 16, marginBottom: 8 },
   codeBadge: {
     backgroundColor: palette.bgCard,
     borderRadius: 12,
@@ -713,7 +689,6 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    maxWidth: 180,
     ...shadows.sm,
   },
   chipPressed: { opacity: 0.7 },

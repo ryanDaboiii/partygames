@@ -100,6 +100,7 @@ export default function SetupScreen() {
     : selectedCount >= MIN_PLAYERS;
 
   const handleStart = async () => {
+    if (starting) return;
     if (isOnline) {
       if (!sessionCode) {
         Alert.alert("No session", "No active session found.");
@@ -133,6 +134,7 @@ export default function SetupScreen() {
       const players: Player[] = roster
         .filter((p) => selectedIds.has(p.id))
         .map((p) => ({ id: p.id, name: p.name }));
+      setStarting(true);
       reset();
       startGame({ mode: "pass-and-play", players, impostorCount, category });
       showThen(
@@ -157,6 +159,7 @@ export default function SetupScreen() {
           </Text>
         </View>
 
+        <View pointerEvents={starting ? "none" : "auto"} style={{ opacity: starting ? 0.5 : 1 }}>
         {/* Category */}
         <Section label="Category">
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -303,6 +306,8 @@ export default function SetupScreen() {
           </View>
         </View>}
 
+        </View>
+
         <GameButton
           label={starting ? "Starting…" : "Start Game"}
           onPress={handleStart}
@@ -310,6 +315,7 @@ export default function SetupScreen() {
           textColor={GAME_THEME.text}
           fullWidth
           disabled={!canStart || starting}
+          loading={starting}
           style={styles.startBtn}
         />
       </ScrollView>

@@ -35,8 +35,6 @@ import { ChartIcon } from "../src/assets/icons/ChartIcon";
 import { ArrowRightIcon } from "../src/assets/icons/ArrowRightIcon";
 import { ArrowLeftIcon } from "../src/assets/icons/ArrowLeftIcon";
 import { XIcon } from "../src/assets/icons/XIcon";
-import { useGameMusic } from "../src/hooks/useGameMusic";
-
 type Step =
   | "choose"
   | "create-name"
@@ -46,7 +44,6 @@ type Step =
   | "offline";
 
 export default function LandingScreen() {
-  useGameMusic("menu");
   const router = useRouter();
   const mode = useSessionStore((s) => s.mode);
   const setSession = useSessionStore((s) => s.setSession);

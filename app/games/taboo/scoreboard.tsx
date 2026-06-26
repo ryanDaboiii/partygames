@@ -79,7 +79,7 @@ export default function TabooScoreboardScreen() {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4 }}>
           {isTie ? <HandshakeIcon size={36} /> : <TrophyIcon size={36} />}
           <Text style={styles.title}>
             {isTie ? "It's a Tie!" : `${winners[0]} Wins!`}
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.lg },
 
-  title: { ...typography.display, color: palette.white, textAlign: "center" },
+  title: { fontSize: 30, fontWeight: "900", color: palette.white, textAlign: "center", flexShrink: 1, marginTop: 6 },
 
   rankList: { gap: spacing.sm },
   rankRow: {

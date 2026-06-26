@@ -18,8 +18,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "package": "com.ryan.partygames",
-      "predictiveBackGestureEnabled": false
+      "package": "com.ryan.partygames"
     },
     "web": {
       "bundler": "metro",
@@ -27,8 +26,7 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font",
-      "expo-audio"
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

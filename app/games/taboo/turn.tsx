@@ -93,6 +93,8 @@ export default function TurnScreen() {
   const passesLeft = MAX_PASSES_PER_TURN - passesUsed;
   const canPass = passesLeft > 0;
 
+  const handlePause = () => setIsPaused(true);
+
   if (!card) return null;
 
   const liveScore = Math.max(0, turnCorrect - turnTaboos);
@@ -135,22 +137,20 @@ export default function TurnScreen() {
         onVoidPoints={handleExitVoid}
         onCancel={() => setShowExitDialog(false)}
       />
-      {/* Timer + player info */}
-      <View style={styles.statusStrip}>
-        <Pressable
-          style={styles.pauseBtn}
-          onPress={() => setIsPaused(true)}
-          hitSlop={8}
-        >
-          <PauseIcon size={20} />
-        </Pressable>
-        <View style={styles.playerInfo}>
-          <Text style={styles.playerNameText}>{cluegiver}</Text>
-          <Text style={styles.scoreText}>{liveScore} pts</Text>
-        </View>
-        <View style={[styles.timerBadge, { borderColor: timeColor }]}>
+      {/* Player name and live points */}
+      <View style={styles.topBar}>
+        <Text style={styles.playerName}>{cluegiver}</Text>
+        <Text style={styles.livePoints}>{liveScore} pts</Text>
+      </View>
+
+      {/* Timer + pause button */}
+      <View style={styles.timerRow}>
+        <View style={[styles.timerBox, { borderColor: timeColor }]}>
           <Text style={[styles.timerText, { color: timeColor }]}>{timeDisplay}</Text>
         </View>
+        <Pressable style={styles.pauseBtn} onPress={handlePause} hitSlop={8}>
+          <PauseIcon size={20} />
+        </Pressable>
       </View>
 
       {/* Card */}
@@ -264,39 +264,53 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
 
-  statusStrip: {
+  topBar: {
+    alignItems: "center",
+    paddingTop: 16,
+    marginBottom: 12,
+  },
+  playerName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    textAlign: "center",
+  },
+  livePoints: {
+    fontSize: 14,
+    color: GAME_THEME.accentLight,
+    textAlign: "center",
+    marginTop: 2,
+  },
+  timerRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingLeft: 72,
-    paddingRight: 60,
-    paddingVertical: spacing.md,
-    gap: spacing.md,
+    justifyContent: "center",
+    gap: 12,
+    marginBottom: 12,
   },
-  timerBadge: {
-    borderRadius: 14,
+  timerBox: {
+    height: 52,
     borderWidth: 2,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    minWidth: 80,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    justifyContent: "center",
     alignItems: "center",
   },
   timerText: {
-    fontSize: scaleFont(28),
-    fontWeight: "900",
+    fontSize: 28,
+    fontWeight: "bold",
+    color: ACCENT,
+    lineHeight: 36,
     fontVariant: ["tabular-nums"],
   },
-  playerInfo: { flex: 1, alignItems: "center", gap: 2 },
-  playerNameText: { ...typography.label, color: palette.muted },
-  scoreText: { ...typography.heading2, color: ACCENT },
-
   pauseBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: palette.bgCard,
-    borderWidth: 1,
-    borderColor: palette.border,
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    borderWidth: 2,
+    borderColor: ACCENT,
     alignItems: "center",
     justifyContent: "center",
   },

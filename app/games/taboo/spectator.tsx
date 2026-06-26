@@ -11,7 +11,7 @@ import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useSessionStore } from "../../../src/store/session";
 import { subscribeToSession, setReturnedToLobby, type SessionData } from "../../../src/firebase/sessions";
 import { auth } from "../../../src/firebase/config";
-import { BanIcon } from "../../../src/assets/icons/BanIcon";
+import { TabooIcon } from "../../../src/assets/icons/TabooIcon";
 import { WaitingDotsIcon } from "../../../src/assets/icons/WaitingDotsIcon";
 import { BackButton } from "../../../src/components/BackButton";
 import { LeaveGameDialog } from "../../../src/components/LeaveGameDialog";
@@ -78,14 +78,14 @@ export default function TabooSpectatorScreen() {
       />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.hero}>
-          <BanIcon size={64} />
+          <TabooIcon size={64} />
           <Text style={styles.heroTitle}>Taboo</Text>
-          <Text style={styles.heroSubtitle}>Being played on the host's phone</Text>
+          <Text style={styles.heroSubtitle}>The game is being played on the host's screen</Text>
         </View>
 
         <View style={styles.infoCard}>
           <Text style={styles.infoText}>
-            Watch the host's screen and listen! Shout "TABOO!" if they say a forbidden word.
+            Listen to the host's clues and guess the indicated word.
           </Text>
         </View>
 

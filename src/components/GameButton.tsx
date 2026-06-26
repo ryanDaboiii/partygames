@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Pressable, Text, StyleSheet, Animated, ViewStyle } from "react-native";
+import { Pressable, Text, StyleSheet, Animated, ViewStyle, ActivityIndicator, View } from "react-native";
 import { spacing, typography } from "../theme";
 
 const EDGE = 4;
@@ -22,6 +22,7 @@ interface GameButtonProps {
   textColor?: string;
   size?: "sm" | "md" | "lg";
   disabled?: boolean;
+  loading?: boolean;
   fullWidth?: boolean;
   style?: ViewStyle;
 }
@@ -33,6 +34,7 @@ export function GameButton({
   textColor = "#FFFFFF",
   size = "md",
   disabled = false,
+  loading = false,
   fullWidth = false,
   style,
 }: GameButtonProps) {
@@ -90,9 +92,14 @@ export function GameButton({
           },
         ]}
       >
-        <Text style={[styles.label, { color: textColor }, labelSizeStyle]}>
-          {label}
-        </Text>
+        {loading ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={textColor} />
+            <Text style={[styles.label, { color: textColor }, labelSizeStyle]}>Loading…</Text>
+          </View>
+        ) : (
+          <Text style={[styles.label, { color: textColor }, labelSizeStyle]}>{label}</Text>
+        )}
       </Animated.View>
     </Pressable>
   );
@@ -124,6 +131,7 @@ const styles = StyleSheet.create({
     minHeight: 64,
     borderRadius: 20,
   },
+  loadingRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   label: {
     ...typography.bodyBold,
     letterSpacing: 0.3,

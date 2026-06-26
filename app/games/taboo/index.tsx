@@ -62,6 +62,7 @@ export default function TabooSetupScreen() {
   const [roundTimeSecs, setRoundTimeSecs] = useState(60);
   const [totalRounds, setTotalRounds] = useState(1);
   const [liveSessionPlayers, setLiveSessionPlayers] = useState<Record<string, SessionPlayer>>({});
+  const [isStarting, setIsStarting] = useState(false);
 
   const isOnline = mode === "online";
 
@@ -77,7 +78,8 @@ export default function TabooSetupScreen() {
   const canStart = players.length >= MIN_PLAYERS;
 
   const handleStart = async () => {
-    if (!canStart) return;
+    if (!canStart || isStarting) return;
+    setIsStarting(true);
     reset();
     startGame({ players, roundTimeSecs, totalRounds, scoringMode });
     if (isOnline && sessionCode) {
@@ -106,6 +108,7 @@ export default function TabooSetupScreen() {
           </Text>
         </View>
 
+        <View pointerEvents={isStarting ? "none" : "auto"} style={{ opacity: isStarting ? 0.5 : 1 }}>
         {/* Players */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Players ({players.length})</Text>
@@ -171,12 +174,15 @@ export default function TabooSetupScreen() {
           </Text>
         </View>
 
+        </View>
+
         <GameButton
           label="Start Game"
           onPress={handleStart}
           color={ACCENT}
           textColor={GAME_THEME.text}
-          disabled={!canStart}
+          disabled={!canStart || isStarting}
+          loading={isStarting}
           fullWidth
           style={styles.startBtn}
         />
