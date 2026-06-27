@@ -10,7 +10,7 @@ import { useRouter } from "expo-router";
 import { GameButton } from "../../../src/components/GameButton";
 import { BackButton } from "../../../src/components/BackButton";
 import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
-import { palette, spacing, typography, scaleFont, shadows } from "../../../src/theme";
+import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useTabooStore, getCurrentCluegiver } from "../../../src/games/taboo/store";
 import { usePlayerStore } from "../../../src/store/players";
 import { useSessionStore } from "../../../src/store/session";
@@ -79,6 +79,10 @@ export default function RecapScreen() {
   const cluegiver = lastTurn.cluegiver;
   const turnNetPoints = Math.max(0, lastTurn.correct - lastTurn.taboos);
 
+  const nextPlayerIndex = (players.indexOf(cluegiver) + 1) % players.length;
+  const nextPlayerName = players[nextPlayerIndex] ?? "next player";
+  const isLastTurn = turnsRemaining <= 0;
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ExitGameDialog
@@ -87,72 +91,35 @@ export default function RecapScreen() {
         onVoidPoints={handleExitVoid}
         onCancel={() => setShowExitDialog(false)}
       />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+
+      {/* Fixed top — always visible, never scrolls */}
+      <View style={styles.fixedTop}>
         <Text style={styles.heading}>Turn Over!</Text>
-        <Text style={styles.subheading}>{cluegiver}'s turn</Text>
+        <Text style={styles.nextPlayerText}>
+          {isLastTurn ? "Game over!" : `Pass the phone to ${nextPlayerName}`}
+        </Text>
 
-        {/* Net points earned */}
-        <View style={styles.pointsCard}>
-          <Text style={styles.pointsLabel}>Points this turn</Text>
-          <Text style={[styles.pointsValue, turnNetPoints === 0 && { color: palette.muted }]}>
-            +{turnNetPoints}
-          </Text>
-        </View>
-
-        {/* Breakdown */}
-        <View style={styles.breakdownCard}>
-          <StatRow
-            label={<View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><CheckIcon size={16} /><Text style={statStyles.label}>Correct</Text></View>}
-            value={lastTurn.correct}
-            contribution={`+${lastTurn.correct}`}
-            color={ACCENT}
-          />
-          <StatRow
-            label={<View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><BanIcon size={16} /><Text style={statStyles.label}>Taboo</Text></View>}
-            value={lastTurn.taboos}
-            contribution={lastTurn.taboos > 0 ? `-${lastTurn.taboos}` : "0"}
-            color={palette.danger}
-          />
-          <StatRow
-            label={<View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><SkipIcon size={16} /><Text style={statStyles.label}>Passed</Text></View>}
-            value={lastTurn.passed}
-            contribution="0"
-            color={palette.muted}
-          />
-          <View style={styles.breakdownDivider} />
-          <View style={statStyles.row}>
-            <Text style={statStyles.label}>Net score</Text>
-            <Text style={[statStyles.value, { color: turnNetPoints > 0 ? ACCENT : palette.muted }]}>
-              {turnNetPoints}
-            </Text>
+        <View style={styles.statsRow}>
+          <View style={styles.statChip}>
+            <CheckIcon size={16} />
+            <Text style={[styles.statValue, { color: ACCENT }]}>{lastTurn.correct}</Text>
+            <Text style={styles.statLabel}>Correct</Text>
+          </View>
+          <View style={styles.statChip}>
+            <SkipIcon size={16} />
+            <Text style={[styles.statValue, { color: palette.muted }]}>{lastTurn.passed}</Text>
+            <Text style={styles.statLabel}>Passed</Text>
+          </View>
+          <View style={styles.statChip}>
+            <BanIcon size={16} />
+            <Text style={[styles.statValue, { color: palette.danger }]}>{lastTurn.taboos}</Text>
+            <Text style={styles.statLabel}>Taboo</Text>
           </View>
         </View>
 
-        {/* All players' game scores */}
-        <View style={styles.scoresSection}>
-          <Text style={styles.scoresLabel}>Scores this game</Text>
-          <View style={styles.scoresList}>
-            {players.map((name) => (
-              <View
-                key={name}
-                style={[styles.scoreRow, name === cluegiver && styles.scoreRowActive]}
-              >
-                <Text style={[styles.scoreName, name === cluegiver && { color: ACCENT }]}>
-                  {name}
-                </Text>
-                <Text style={[styles.scoreValue, name === cluegiver && { color: ACCENT }]}>
-                  {gamePoints[name] ?? 0}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {turnsRemaining > 0 && (
-          <Text style={styles.nextHint}>
-            {turnsRemaining} turn{turnsRemaining !== 1 ? "s" : ""} remaining
-          </Text>
-        )}
+        <Text style={styles.netScore}>
+          {turnNetPoints > 0 ? `+${turnNetPoints}` : `${turnNetPoints}`} pts this turn
+        </Text>
 
         <GameButton
           label={turnsRemaining <= 0 ? "See Final Scores" : "Next Turn →"}
@@ -160,90 +127,90 @@ export default function RecapScreen() {
           color={ACCENT}
           textColor={GAME_THEME.text}
           fullWidth
-          style={styles.nextBtn}
         />
+      </View>
+
+      {/* Scrollable scoreboard */}
+      <ScrollView
+        style={styles.scoreboardScroll}
+        contentContainerStyle={styles.scoreboardContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <Text style={styles.scoresLabel}>Scores this game</Text>
+        <View style={styles.scoresList}>
+          {players.map((name) => (
+            <View
+              key={name}
+              style={[styles.scoreRow, name === cluegiver && styles.scoreRowActive]}
+            >
+              <Text style={[styles.scoreName, name === cluegiver && { color: ACCENT }]}>
+                {name}
+              </Text>
+              <Text style={[styles.scoreValue, name === cluegiver && { color: ACCENT }]}>
+                {gamePoints[name] ?? 0}
+              </Text>
+            </View>
+          ))}
+        </View>
+        {turnsRemaining > 0 && (
+          <Text style={styles.nextHint}>
+            {turnsRemaining} turn{turnsRemaining !== 1 ? "s" : ""} remaining
+          </Text>
+        )}
       </ScrollView>
+
       <BackButton onPress={() => setShowExitDialog(true)} color={GAME_THEME.accent} />
     </SafeAreaView>
   );
 }
 
-function StatRow({
-  label,
-  value,
-  contribution,
-  color,
-}: {
-  label: React.ReactNode;
-  value: number;
-  contribution: string;
-  color: string;
-}) {
-  return (
-    <View style={statStyles.row}>
-      <View style={{ flex: 1 }}>{label}</View>
-      <View style={statStyles.right}>
-        <Text style={[statStyles.value, { color }]}>{value}</Text>
-        <Text style={[statStyles.contribution, { color }]}>({contribution})</Text>
-      </View>
-    </View>
-  );
-}
-
-const statStyles = StyleSheet.create({
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: spacing.sm,
-  },
-  label: { ...typography.body, color: palette.muted },
-  right: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
-  value: { ...typography.heading2, color: palette.white },
-  contribution: { ...typography.caption, color: palette.muted },
-});
-
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  container: {
-    padding: spacing.lg,
-    paddingBottom: spacing.xxxl,
-    gap: spacing.lg,
-  },
 
-  heading: { ...typography.display, color: palette.white, textAlign: "center" },
-  subheading: { ...typography.body, color: palette.muted, textAlign: "center" },
-
-  pointsCard: {
-    backgroundColor: ACCENT + "22",
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: ACCENT,
-    padding: spacing.xl,
+  fixedTop: {
+    paddingTop: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     gap: spacing.sm,
-    ...shadows.md,
   },
-  pointsLabel: { ...typography.label, color: ACCENT },
-  pointsValue: { fontSize: scaleFont(64), fontWeight: "900", color: ACCENT },
+  heading: { ...typography.display, color: palette.white, textAlign: "center" },
+  nextPlayerText: { fontSize: 20, fontWeight: "700", color: palette.white, textAlign: "center" },
 
-  breakdownCard: {
+  statsRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+    justifyContent: "center",
+  },
+  statChip: {
+    alignItems: "center",
+    gap: 4,
     backgroundColor: palette.bgCard,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: palette.border,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    ...shadows.sm,
+    minWidth: 72,
   },
-  breakdownDivider: {
-    height: 1,
-    backgroundColor: palette.border,
-    marginVertical: spacing.sm,
+  statValue: { ...typography.heading2, color: palette.white },
+  statLabel: { ...typography.caption, color: palette.muted },
+
+  netScore: {
+    ...typography.bodyBold,
+    color: GAME_THEME.accentLight,
+    textAlign: "center",
   },
 
-  scoresSection: { gap: spacing.md },
-  scoresLabel: { ...typography.label, color: palette.muted },
+  scoreboardScroll: { flex: 1 },
+  scoreboardContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
+    gap: spacing.md,
+  },
+  scoresLabel: { ...typography.label, color: palette.muted, textAlign: "center" },
   scoresList: { gap: spacing.sm },
   scoreRow: {
     flexDirection: "row",
@@ -269,5 +236,4 @@ const styles = StyleSheet.create({
     color: palette.border,
     textAlign: "center",
   },
-  nextBtn: { marginTop: spacing.sm },
 });

@@ -254,7 +254,7 @@ export default function LandingScreen() {
         <View style={styles.chooseContainer}>
           <View style={styles.hero}>
             <PartyIcon size={64} />
-            <Text style={styles.appName}>Party Games</Text>
+            <Text style={styles.appName}>PartyFrenzy</Text>
             <Text style={styles.tagline}>Pick your setup to get started</Text>
           </View>
 

@@ -1,3 +1,6 @@
+// NOTE: If you update the bundle ID in app.json, also update it in:
+// Firebase Console → Project Settings → Your Apps → iOS app → Bundle ID
+// Current bundle ID: com.ryan.partyfrenzy
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";

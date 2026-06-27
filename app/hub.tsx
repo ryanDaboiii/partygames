@@ -461,7 +461,7 @@ export default function HubScreen() {
           <View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <PartyIcon size={24} />
-              <Text style={styles.appName}>Party Games</Text>
+              <Text style={styles.appName}>PartyFrenzy</Text>
             </View>
             <Text style={styles.subtitle}>
               Pick a game to play next{'  /  '}
@@ -662,6 +662,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     alignItems: "center",
+    marginRight: spacing.sm,
   },
   codeLabel: { ...typography.label, color: palette.muted, fontSize: 9 },
   codeValue: { fontSize: 20, fontWeight: "900", color: ACCENT, letterSpacing: 4 },

@@ -59,8 +59,8 @@ export function useGameMusic(gameId: GameMusicId | null) {
     }
 
     Audio.setAudioModeAsync({
-      playsInSilentModeIOS: false,
-      staysActiveInBackground: false,
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
     }).catch(() => {});
 
     playMusic(gameId);
