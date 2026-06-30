@@ -35,6 +35,7 @@ import { HourglassIcon } from "../src/assets/icons/HourglassIcon";
 import { MedalIcon } from "../src/assets/icons/MedalIcon";
 import { SparkleIcon } from "../src/assets/icons/SparkleIcon";
 import { XIcon } from "../src/assets/icons/XIcon";
+import AppLogo from "../src/components/AppLogo";
 const ACCENT = palette.wavelength;
 
 function getInitials(name: string): string {
@@ -310,6 +311,8 @@ export default function HubScreen() {
           contentContainerStyle={styles.container}
           showsVerticalScrollIndicator={false}
         >
+          <AppLogo size="small" />
+
           {/* Session code — tap to share */}
           {sessionCode && (
             <Pressable onPress={handleShareCode} style={styles.codeBannerLarge}>
@@ -461,7 +464,7 @@ export default function HubScreen() {
           <View>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <PartyIcon size={24} />
-              <Text style={styles.appName}>PartyFrenzy</Text>
+              <AppLogo size="small" />
             </View>
             <Text style={styles.subtitle}>
               Pick a game to play next{'  /  '}

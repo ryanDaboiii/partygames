@@ -12,6 +12,7 @@ import { useSessionStore } from "../src/store/session";
 import { subscribeToSession, type SessionData } from "../src/firebase/sessions";
 import { WaitingDotsIcon } from "../src/assets/icons/WaitingDotsIcon";
 import { BackButton } from "../src/components/BackButton";
+import AppLogo from "../src/components/AppLogo";
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -69,6 +70,7 @@ export default function GameInProgressScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <AppLogo size="small" />
         <View style={styles.hero}>
           <Text style={[styles.heroTitle, { color: accent }]}>{gameName(currentGame)}</Text>
           <Text style={styles.heroSubtitle}>Being played on the host's phone</Text>

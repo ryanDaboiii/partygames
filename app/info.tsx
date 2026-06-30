@@ -15,6 +15,7 @@ import { WavelengthIcon } from "../src/assets/icons/WavelengthIcon";
 import { TabooIcon } from "../src/assets/icons/TabooIcon";
 import { ArrowLeftIcon } from "../src/assets/icons/ArrowLeftIcon";
 import { SparkleIcon } from "../src/assets/icons/SparkleIcon";
+import AppLogo from "../src/components/AppLogo";
 
 type Section = {
   theme: { accent: string; accentDark: string; accentMuted: string };
@@ -128,6 +129,7 @@ export default function InfoScreen() {
           contentContainerStyle={styles.container}
           showsVerticalScrollIndicator={false}
         >
+          <AppLogo size="small" />
           <Text style={styles.heading}>How to Play</Text>
           <Text style={styles.subheading}>Pick a game and learn the rules</Text>
 

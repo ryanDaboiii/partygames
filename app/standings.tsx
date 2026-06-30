@@ -20,6 +20,7 @@ import { useSessionStore } from "../src/store/session";
 import { TrophyIcon } from "../src/assets/icons/TrophyIcon";
 import { BackButton } from "../src/components/BackButton";
 import { MedalIcon } from "../src/assets/icons/MedalIcon";
+import AppLogo from "../src/components/AppLogo";
 
 const ACCENT = palette.warning;
 
@@ -76,6 +77,7 @@ export default function StandingsScreen() {
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
+        <AppLogo size="small" />
         <View style={styles.hero}>
           <TrophyIcon size={56} />
           <Text style={styles.title}>Standings</Text>

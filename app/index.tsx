@@ -35,6 +35,7 @@ import { ChartIcon } from "../src/assets/icons/ChartIcon";
 import { ArrowRightIcon } from "../src/assets/icons/ArrowRightIcon";
 import { ArrowLeftIcon } from "../src/assets/icons/ArrowLeftIcon";
 import { XIcon } from "../src/assets/icons/XIcon";
+import AppLogo from "../src/components/AppLogo";
 type Step =
   | "choose"
   | "create-name"
@@ -254,7 +255,7 @@ export default function LandingScreen() {
         <View style={styles.chooseContainer}>
           <View style={styles.hero}>
             <PartyIcon size={64} />
-            <Text style={styles.appName}>PartyFrenzy</Text>
+            <AppLogo size="large" />
             <Text style={styles.tagline}>Pick your setup to get started</Text>
           </View>
 
