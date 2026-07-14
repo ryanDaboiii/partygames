@@ -2,36 +2,25 @@ import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
-  ScrollView,
   StyleSheet,
   SafeAreaView,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useSessionStore } from "../../../src/store/session";
-import { subscribeToSession, setReturnedToLobby, type SessionData } from "../../../src/firebase/sessions";
+import { subscribeToSession, setReturnedToLobby } from "../../../src/firebase/sessions";
 import { auth } from "../../../src/firebase/config";
 import { TabooIcon } from "../../../src/assets/icons/TabooIcon";
-import { WaitingDotsIcon } from "../../../src/assets/icons/WaitingDotsIcon";
 import { BackButton } from "../../../src/components/BackButton";
 import { LeaveGameDialog } from "../../../src/components/LeaveGameDialog";
 import { getGameTheme } from "../../../src/games/registry";
 
 const GAME_THEME = getGameTheme("taboo");
-const ACCENT = GAME_THEME.accent;
-
-function getInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
 
 export default function TabooSpectatorScreen() {
   const router = useRouter();
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const mode = useSessionStore((s) => s.mode);
 
-  const [session, setSession] = useState<SessionData | null>(null);
   const [showExitDialog, setShowExitDialog] = useState(false);
 
   useEffect(() => {
@@ -44,7 +33,6 @@ export default function TabooSpectatorScreen() {
         router.replace("/");
         return;
       }
-      setSession(data);
       // Navigate back to hub when game ends
       if (!data.currentGame || data.gameStatus !== "in-progress") {
         router.replace("/hub");
@@ -61,14 +49,6 @@ export default function TabooSpectatorScreen() {
     router.replace("/hub");
   };
 
-  const players = session
-    ? Object.entries(session.players).map(([uid, p]) => ({
-        uid,
-        name: p.name,
-        isHost: uid === session.hostId,
-      }))
-    : [];
-
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <LeaveGameDialog
@@ -76,45 +56,15 @@ export default function TabooSpectatorScreen() {
         onLeave={handleLeave}
         onCancel={() => setShowExitDialog(false)}
       />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        <View style={styles.hero}>
-          <TabooIcon size={64} />
-          <Text style={styles.heroTitle}>Taboo</Text>
-          <Text style={styles.heroSubtitle}>The game is being played on the host's screen</Text>
-        </View>
-
-        <View style={styles.infoCard}>
-          <Text style={styles.infoText}>
-            Listen to the host's clues and guess the indicated word.
-          </Text>
-        </View>
-
-        {players.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Players ({players.length})</Text>
-            <View style={styles.playerList}>
-              {players.map(({ uid, name, isHost }) => (
-                <View key={uid} style={styles.playerRow}>
-                  <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{getInitials(name)}</Text>
-                  </View>
-                  <Text style={styles.playerName}>{name}</Text>
-                  {isHost && (
-                    <View style={styles.hostBadge}>
-                      <Text style={styles.hostBadgeText}>HOST</Text>
-                    </View>
-                  )}
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
-        <View style={styles.waitingRow}>
-          <WaitingDotsIcon size={24} />
-          <Text style={styles.waitingText}>Waiting for round to finish…</Text>
-        </View>
-      </ScrollView>
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 32 }}>
+        <TabooIcon size={72} />
+        <Text style={{ fontSize: 26, fontWeight: "bold", color: "#FFFFFF", textAlign: "center", marginTop: 24, marginBottom: 12 }}>
+          Taboo is live!
+        </Text>
+        <Text style={{ fontSize: 17, color: "rgba(255,255,255,0.7)", textAlign: "center", lineHeight: 26 }}>
+          The host is playing on their screen.{'\n'}No need to use your phone right now.
+        </Text>
+      </View>
       <BackButton onPress={() => setShowExitDialog(true)} color={GAME_THEME.accent} />
     </SafeAreaView>
   );
@@ -122,62 +72,4 @@ export default function TabooSpectatorScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  container: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.xl },
-
-  hero: { alignItems: "center", paddingTop: spacing.xl, gap: spacing.sm },
-  heroEmoji: { fontSize: 64 },
-  heroTitle: { ...typography.display, color: palette.white },
-  heroSubtitle: { ...typography.body, color: palette.muted, textAlign: "center" },
-
-  infoCard: {
-    backgroundColor: ACCENT + "15",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: ACCENT + "44",
-    padding: spacing.lg,
-  },
-  infoText: { ...typography.body, color: palette.white, textAlign: "center", lineHeight: 24 },
-
-  section: { gap: spacing.md },
-  sectionLabel: { ...typography.label, color: palette.muted },
-  playerList: { gap: spacing.sm },
-  playerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    backgroundColor: palette.bgCard,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: palette.border,
-    padding: spacing.md,
-    ...shadows.sm,
-  },
-  avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: ACCENT + "33",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { ...typography.caption, color: ACCENT, fontSize: 12 },
-  playerName: { ...typography.bodyBold, color: palette.white, flex: 1 },
-  hostBadge: {
-    backgroundColor: palette.warning + "33",
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: palette.warning,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  hostBadgeText: { fontSize: 9, fontWeight: "800", color: palette.warning, letterSpacing: 0.5 },
-
-  waitingRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.sm,
-  },
-  waitingDot: { color: ACCENT, fontSize: 10 },
-  waitingText: { ...typography.caption, color: palette.muted },
 });

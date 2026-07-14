@@ -88,29 +88,35 @@ function SessionEndWatcher() {
       const game = data.currentGame;
       const isActive = game && data.gameStatus === "in-progress";
 
-      // ── Case 2: game started ─────────────────────────────────────────────
-      if (isActive && game) {
-        inGameRef.current = true;
-        // Skip navigation on first callback — game was already running when we joined.
-        if (isFirstCallbackRef.current) {
-          isFirstCallbackRef.current = false;
-          lastNavigatedGameRef.current = game;
-          return;
-        }
-        // Navigate to game only when a genuinely new game starts.
-        if (game !== lastNavigatedGameRef.current) {
-          lastNavigatedGameRef.current = game;
-          navigateToGame(game);
-        }
-      } else {
-        if (isFirstCallbackRef.current) isFirstCallbackRef.current = false;
-      }
-
-      // ── Case 3: game ended ───────────────────────────────────────────────
-      if (!game && inGameRef.current) {
+      // ── No active game: reset guards unconditionally and return early ────
+      // Resetting here (not only when inGameRef was true) guarantees guards are
+      // always clear before the next game start is evaluated, preventing stale
+      // state from blocking or delaying the second navigation.
+      if (!isActive) {
+        const wasInGame = inGameRef.current;
         inGameRef.current = false;
         lastNavigatedGameRef.current = null;
-        router.replace("/hub");
+        isFirstCallbackRef.current = false;
+        if (wasInGame) {
+          router.replace("/hub");
+        }
+        return;
+      }
+
+      // ── Active game ──────────────────────────────────────────────────────
+      inGameRef.current = true;
+
+      // Skip navigation on first callback — game was already running when we joined.
+      if (isFirstCallbackRef.current) {
+        isFirstCallbackRef.current = false;
+        lastNavigatedGameRef.current = game;
+        return;
+      }
+
+      // Navigate only when a genuinely new game starts.
+      if (game !== lastNavigatedGameRef.current) {
+        lastNavigatedGameRef.current = game;
+        navigateToGame(game);
       }
     });
   }, [mode, isHost, sessionCode]);

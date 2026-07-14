@@ -125,7 +125,7 @@ export async function startOnlineGame(roomCode: string): Promise<void> {
   if (!snap.exists()) throw new Error("Room not found");
 
   const room = snap.data() as RoomData;
-  const secretWord = getRandomWord(room.category);
+  const { word: secretWord } = getRandomWord(room.category);
 
   // Assign impostors randomly
   const shuffled = [...room.players].sort(() => Math.random() - 0.5);

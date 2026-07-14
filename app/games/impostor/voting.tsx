@@ -1,6 +1,4 @@
 import React, { useState } from "react";
-import { BackButton } from "../../../src/components/BackButton";
-import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
 import {
   View,
   Text,
@@ -27,11 +25,8 @@ export default function VotingScreen() {
   const votingIndex = useImpostorStore((s) => s.votingIndex);
   const submitVote = useImpostorStore((s) => s.submitVote);
   const advanceVoting = useImpostorStore((s) => s.advanceVoting);
-  const reset = useImpostorStore((s) => s.reset);
-
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
-  const [showExitDialog, setShowExitDialog] = useState(false);
 
   const isLast = votingIndex === assignments.length - 1;
   const voter = assignments[votingIndex];
@@ -57,16 +52,8 @@ export default function VotingScreen() {
     }
   };
 
-  const handleExitKeep = () => { reset(); router.replace('/hub'); };
-
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
-      <ExitGameDialog
-        visible={showExitDialog}
-        onKeepScores={handleExitKeep}
-        onVoidPoints={handleExitKeep}
-        onCancel={() => setShowExitDialog(false)}
-      />
       <View style={styles.container}>
         {/* Progress */}
         <View style={styles.dots}>
@@ -160,7 +147,6 @@ export default function VotingScreen() {
           />
         )}
       </View>
-      <BackButton onPress={() => setShowExitDialog(true)} />
     </SafeAreaView>
   );
 }

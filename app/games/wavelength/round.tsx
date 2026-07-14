@@ -10,7 +10,6 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { GameButton } from "../../../src/components/GameButton";
-import { HoldToReveal } from "../../../src/components/HoldToReveal";
 import { palette, spacing, typography, scaleFont, shadows } from "../../../src/theme";
 import { useWavelengthStore } from "../../../src/games/wavelength/store";
 import { CATEGORIES } from "../../../src/games/wavelength/categories";
@@ -18,10 +17,10 @@ import { getGameTheme } from "../../../src/games/registry";
 import type { Category } from "../../../src/games/wavelength/categories";
 import { EyesClosedIcon } from "../../../src/assets/icons/EyesClosedIcon";
 import { TargetIcon } from "../../../src/assets/icons/TargetIcon";
-import { CategorySwitchIcon } from "../../../src/assets/icons/CategorySwitchIcon";
 import { CheckIcon } from "../../../src/assets/icons/CheckIcon";
 import { XIcon } from "../../../src/assets/icons/XIcon";
 import { ArrowLeftIcon } from "../../../src/assets/icons/ArrowLeftIcon";
+import { HoldToReveal } from "../../../src/components/HoldToReveal";
 import { playSfx } from "../../../src/hooks/useSoundEffects";
 import { BackButton } from "../../../src/components/BackButton";
 import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
@@ -52,8 +51,8 @@ export default function RoundScreen() {
   const totalRounds = useWavelengthStore((s) => s.totalRounds);
   const currentRound = useWavelengthStore((s) => s.currentRound);
   const startRound = useWavelengthStore((s) => s.startRound);
-  const switchCategory = useWavelengthStore((s) => s.switchCategory);
   const recordExtraClueCategory = useWavelengthStore((s) => s.recordExtraClueCategory);
+  const skipRound = useWavelengthStore((s) => s.skipRound);
   const submitResult = useWavelengthStore((s) => s.submitResult);
   const pointsAwardedThisGame = useWavelengthStore((s) => s.pointsAwardedThisGame);
   const reset = useWavelengthStore((s) => s.reset);
@@ -67,21 +66,14 @@ export default function RoundScreen() {
 
   const defaultGuesserIndex = (roundNumber - 1) % players.length;
   const [selectedGuesserIndex, setSelectedGuesserIndex] = useState(defaultGuesserIndex);
-  const categoryStyle = useWavelengthStore((s) => s.categoryStyle);
   const [localPhase, setLocalPhase] = useState<LocalPhase>("guesser-select");
   const [cardRevealed, setCardRevealed] = useState(false);
+  const [isPeeking, setIsPeeking] = useState(false);
   const [clueIndex, setClueIndex] = useState(0);
   const [extraClueEntry, setExtraClueEntry] = useState<{ player: { id: string; name: string }; category: Category } | null>(null);
 
-  const displayCategory = (cat: Category) => categoryStyle === "simple" ? cat.name : cat.label;
+  const displayCategory = (cat: Category) => cat.name;
 
-  const handleExitKeep = async () => {
-    if (mode === "online" && isHost && sessionCode) {
-      try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
-    }
-    reset();
-    router.replace('/hub');
-  };
   const handleExitVoid = async () => {
     Object.entries(pointsAwardedThisGame).forEach(([id, pts]) => {
       if (pts > 0) addPoints(id, -pts);
@@ -95,8 +87,7 @@ export default function RoundScreen() {
   const exitDialog = (
     <ExitGameDialog
       visible={showExitDialog}
-      onKeepScores={handleExitKeep}
-      onVoidPoints={handleExitVoid}
+      onVoidScores={handleExitVoid}
       onCancel={() => setShowExitDialog(false)}
     />
   );
@@ -115,6 +106,7 @@ export default function RoundScreen() {
     setSelectedGuesserIndex((roundNumber - 1) % players.length);
     setLocalPhase("guesser-select");
     setCardRevealed(false);
+    setIsPeeking(false);
     setClueIndex(0);
     setExtraClueEntry(null);
     revealScale.setValue(0.3);
@@ -222,6 +214,9 @@ export default function RoundScreen() {
             textColor={GAME_THEME.text}
             fullWidth
           />
+          <Pressable style={styles.skipBtn} onPress={() => skipRound()}>
+            <Text style={styles.skipBtnText}>Skip this round (0 pts)</Text>
+          </Pressable>
         </ScrollView>
         {backBtn}
       </SafeAreaView>
@@ -261,23 +256,18 @@ export default function RoundScreen() {
   // ─── PHASE: SINGLE REVEAL ────────────────────────────────────────────────
 
   if (localPhase === "single-reveal" && currentRound) {
-    const nonGuessers = currentRound.playerCategories;
-    const categorySwitches = currentRound.categorySwitches;
-
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
         {exitDialog}
-        <View style={styles.page}>
+        <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
           <RoundBadge round={cycleNumber} total={totalRounds} />
 
-          <Text style={styles.passPrompt}>Everyone except the Guesser, look together</Text>
-          <Text style={styles.passHint}>Hold to reveal the number and your categories</Text>
+          <Text style={styles.passPrompt}>Everyone except the Guesser, look here</Text>
 
           <View style={styles.holdArea}>
             <HoldToReveal
-              holdLabel="Hold to reveal"
               accentColor={ACCENT}
-              holdDuration={700}
+              holdLabel="Hold to reveal"
               onReveal={() => setCardRevealed(true)}
             >
               <View style={styles.revealAllCard}>
@@ -288,41 +278,14 @@ export default function RoundScreen() {
                 <Text style={styles.categoryCardOf}>out of {maxNumber}</Text>
                 <View style={styles.cardDivider} />
                 <View style={styles.revealAllList}>
-                  {nonGuessers.map(({ player, category }, catIndex) => {
-                    const switchesUsed = categorySwitches[player.id] ?? 0;
-                    const switchesLeft = MAX_SWITCHES - switchesUsed;
-                    return (
-                      <View key={player.id} style={styles.revealAllRow}>
-                        <Text style={styles.revealAllName}>{player.name}</Text>
-                        <View style={styles.revealAllRight}>
-                          <Text style={[styles.revealAllCategory, { color: ACCENT }]}>
-                            {displayCategory(category)}
-                          </Text>
-                          <Pressable
-                            style={[
-                              styles.switchBtn,
-                              switchesLeft <= 0 && styles.switchBtnDisabled,
-                            ]}
-                            onPress={() => switchCategory(catIndex)}
-                            disabled={switchesLeft <= 0}
-                          >
-                            {switchesLeft > 0 ? (
-                              <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                                <CategorySwitchIcon size={11} />
-                                <Text style={styles.switchBtnText}>
-                                  New category ({switchesLeft} left)
-                                </Text>
-                              </View>
-                            ) : (
-                              <Text style={[styles.switchBtnText, styles.switchBtnTextDisabled]}>
-                                No more switches
-                              </Text>
-                            )}
-                          </Pressable>
-                        </View>
-                      </View>
-                    );
-                  })}
+                  {currentRound.playerCategories.map(({ player, category }) => (
+                    <View key={player.id} style={styles.revealAllRow}>
+                      <Text style={styles.revealAllName}>{player.name}</Text>
+                      <Text style={[styles.revealAllCategory, { color: ACCENT }]}>
+                        {displayCategory(category)}
+                      </Text>
+                    </View>
+                  ))}
                 </View>
               </View>
             </HoldToReveal>
@@ -337,7 +300,7 @@ export default function RoundScreen() {
               fullWidth
             />
           )}
-        </View>
+        </ScrollView>
         {backBtn}
       </SafeAreaView>
     );
@@ -387,6 +350,17 @@ export default function RoundScreen() {
             </Text>
             <Text style={styles.clueTurnName}>{current.player.name}</Text>
             <Text style={[styles.clueTurnCategory, { color: ACCENT }]}>{displayCategory(current.category)}</Text>
+            <Pressable
+              style={styles.peekBtn}
+              onPressIn={() => setIsPeeking(true)}
+              onPressOut={() => setIsPeeking(false)}
+            >
+              {isPeeking ? (
+                <Text style={styles.peekNumberText}>{currentRound.secretNumber}</Text>
+              ) : (
+                <Text style={styles.peekHintText}>Hold to see number</Text>
+              )}
+            </Pressable>
           </View>
 
           <GameButton
@@ -532,7 +506,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     padding: spacing.lg,
     paddingTop: 106,
-    paddingBottom: spacing.xl,
+    paddingBottom: 36,
     gap: spacing.lg,
     justifyContent: "space-between",
   },
@@ -639,6 +613,40 @@ const styles = StyleSheet.create({
     color: ACCENT,
   },
 
+  peekBtn: {
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.2)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    marginTop: spacing.sm,
+  },
+  peekNumberText: {
+    color: palette.white,
+    fontSize: 28,
+    fontWeight: "bold",
+  },
+  peekHintText: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 13,
+    fontStyle: "italic",
+  },
+
+  skipBtn: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    marginTop: spacing.sm,
+    alignSelf: "center",
+  },
+  skipBtnText: {
+    ...typography.caption,
+    color: "rgba(255,255,255,0.4)",
+  },
+
   section: { gap: spacing.sm },
   sectionLabel: { ...typography.label, color: palette.muted },
 
@@ -649,7 +657,7 @@ const styles = StyleSheet.create({
 
 const rbStyles = StyleSheet.create({
   badge: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     backgroundColor: ACCENT + "22",
     borderRadius: 10,
     borderWidth: 1,

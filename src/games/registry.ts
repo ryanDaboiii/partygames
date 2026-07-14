@@ -55,7 +55,7 @@ export const GAMES: GameDefinition[] = [
   {
     id: "wavelength",
     title: "Wavelength",
-    description: "Everyone gets a number. Each player picks something from their category that matches it. Can the Guesser figure out the number?",
+    description: "Everyone gets a secret number. Can the guesser figure it out?",
     icon: "📡",
     IconComponent: WavelengthIcon,
     accentColor: palette.wavelength,

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import ConfettiCannon from "react-native-confetti-cannon";
 const { width: screenWidth } = Dimensions.get("window");
 import { usePlayerStore } from "../src/store/players";
 import { useSessionStore } from "../src/store/session";
+import { subscribeToSession, type SessionData } from "../src/firebase/sessions";
 import { TrophyIcon } from "../src/assets/icons/TrophyIcon";
 import { BackButton } from "../src/components/BackButton";
 import { MedalIcon } from "../src/assets/icons/MedalIcon";
@@ -26,12 +27,26 @@ const ACCENT = palette.warning;
 
 export default function StandingsScreen() {
   const router = useRouter();
+  const mode = useSessionStore((s) => s.mode);
+  const sessionCode = useSessionStore((s) => s.sessionCode);
   const players = usePlayerStore((s) => s.players);
   const resetScores = usePlayerStore((s) => s.resetScores);
   const resetAll = usePlayerStore((s) => s.resetAll);
   const clearSession = useSessionStore((s) => s.clearSession);
 
-  const sorted = [...players].sort((a, b) => b.totalScore - a.totalScore);
+  const [liveSession, setLiveSession] = useState<SessionData | null>(null);
+
+  useEffect(() => {
+    if (mode !== "online" || !sessionCode) return;
+    return subscribeToSession(sessionCode, setLiveSession);
+  }, [mode, sessionCode]);
+
+  const sorted = mode === "online" && liveSession
+    ? Object.entries(liveSession.players)
+        .map(([uid, p]) => ({ id: uid, name: p.name, totalScore: p.totalScore ?? 0 }))
+        .sort((a, b) => b.totalScore - a.totalScore)
+    : [...players].sort((a, b) => b.totalScore - a.totalScore);
+
   const ranks: number[] = [];
   sorted.forEach((p, i) => {
     if (i === 0) {

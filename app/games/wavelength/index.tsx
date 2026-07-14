@@ -51,7 +51,6 @@ export default function WavelengthSetup() {
   const initialized = useRef(false);
   const [maxNumber, setMaxNumber] = useState(10);
   const [totalRounds, setTotalRounds] = useState(1);
-  const [categoryStyle, setCategoryStyle] = useState<"specific" | "simple">("simple");
   const [showExclusion, setShowExclusion] = useState(false);
   const [busy, setBusy] = useState(false);
   const { showThen, overlay } = useGameIntro();
@@ -112,7 +111,7 @@ export default function WavelengthSetup() {
       const cats = pickCategories(nonGuessers.length);
       const assignments: Record<string, WavelengthFSAssignment> = {};
       nonGuessers.forEach((uid, i) => {
-        assignments[uid] = { categoryName: cats[i].name, categoryLabel: cats[i].label, categoryHint: cats[i].hint };
+        assignments[uid] = { categoryName: cats[i].name };
       });
 
       const initialState: WavelengthFSState = {
@@ -120,7 +119,6 @@ export default function WavelengthSetup() {
         round: 1,
         totalRounds,
         totalTurns: totalRounds * playerOrder.length,
-        categoryStyle,
         guesserId,
         secretNumber,
         range: maxNumber,
@@ -146,7 +144,7 @@ export default function WavelengthSetup() {
       }
       showThen(
         { icon: "📡", IconComponent: WavelengthIcon, title: "Wavelength", accentColor: ACCENT },
-        () => router.push("/games/wavelength/online")
+        () => router.replace("/games/wavelength/online")
       );
       return;
     }
@@ -156,13 +154,13 @@ export default function WavelengthSetup() {
     const players: Player[] = roster
       .filter((p) => selectedIds.has(p.id))
       .map((p) => ({ id: p.id, name: p.name }));
-    startGame({ players, maxNumber, totalRounds, categoryStyle });
+    startGame({ players, maxNumber, totalRounds });
     if (mode === "online" && sessionCode) {
       try { await setSessionCurrentGame(sessionCode, "wavelength"); } catch (_) {}
     }
     showThen(
       { icon: "📡", IconComponent: WavelengthIcon, title: "Wavelength", accentColor: ACCENT },
-      () => router.push("/games/wavelength/round")
+      () => router.replace("/games/wavelength/round")
     );
   };
 
@@ -211,29 +209,6 @@ export default function WavelengthSetup() {
               onChange={setTotalRounds}
               compact
             />
-          </View>
-        </Section>
-
-        <Section label="Category style">
-          <View style={styles.segmentRow}>
-            {(["simple", "specific"] as const).map((s) => {
-              const sel = categoryStyle === s;
-              return (
-                <Pressable
-                  key={s}
-                  style={[styles.segmentBtn, sel && { borderColor: ACCENT, backgroundColor: ACCENT + "22" }]}
-                  onPress={() => setCategoryStyle(s)}
-                >
-                  <Text style={styles.segmentIcon}>{s === "specific" ? "🎯" : "📋"}</Text>
-                  <Text style={[styles.segmentLabel, sel && { color: ACCENT }]}>
-                    {s === "specific" ? "Specific" : "Simple"}
-                  </Text>
-                  <Text style={styles.segmentDesc}>
-                    {s === "specific" ? '"Movies based on\nintensity"' : '"Movies"'}
-                  </Text>
-                </Pressable>
-              );
-            })}
           </View>
         </Section>
 

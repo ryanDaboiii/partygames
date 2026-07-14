@@ -13,6 +13,7 @@ interface ImpostorStore extends ImpostorGameState {
   // fixed once per game — for the "speaking order" shown on the discussion screen
   speakingOrder: Player[];
   pointsAwardedThisGame: Record<string, number>;
+  impostorHint: string;
 
   startGame: (setup: ImpostorSetup) => void;
   advanceReveal: () => void;
@@ -39,8 +40,8 @@ function shufflePlayers(players: Player[]): Player[] {
   return [...players].sort(() => Math.random() - 0.5);
 }
 
-function buildAssignments(setup: ImpostorSetup): { assignments: PlayerAssignment[]; secretWord: string } {
-  const secretWord = getRandomWord(setup.category);
+function buildAssignments(setup: ImpostorSetup): { assignments: PlayerAssignment[]; secretWord: string; impostorHint: string } {
+  const { word: secretWord, hint: impostorHint } = getRandomWord(setup.category);
 
   // Shuffle players to randomize who is the impostor
   const shuffled = [...setup.players].sort(() => Math.random() - 0.5);
@@ -55,22 +56,24 @@ function buildAssignments(setup: ImpostorSetup): { assignments: PlayerAssignment
     word: impostorIds.has(player.id) ? undefined : secretWord,
   }));
 
-  return { assignments, secretWord };
+  return { assignments, secretWord, impostorHint };
 }
 
 export const useImpostorStore = create<ImpostorStore>((set, get) => ({
   ...INITIAL_STATE,
   speakingOrder: [],
   pointsAwardedThisGame: {} as Record<string, number>,
+  impostorHint: "",
 
-  reset: () => set({ ...INITIAL_STATE, speakingOrder: [], pointsAwardedThisGame: {} }),
+  reset: () => set({ ...INITIAL_STATE, speakingOrder: [], pointsAwardedThisGame: {}, impostorHint: "" }),
 
   startGame: (setup) => {
-    const { assignments, secretWord } = buildAssignments(setup);
+    const { assignments, secretWord, impostorHint } = buildAssignments(setup);
     set({
       setup,
       assignments,
       secretWord,
+      impostorHint,
       revealIndex: 0,
       votes: [],
       votingIndex: 0,

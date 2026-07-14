@@ -1,5 +1,7 @@
 import { Audio } from "expo-av";
 
+Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true }).catch(() => {});
+
 const sfx = {
   correct: require("../../assets/sounds/correct.wav"),
   wrong: require("../../assets/sounds/wrong.wav"),
@@ -25,6 +27,6 @@ export function playSfx(id: SfxId) {
       });
     })
     .catch((e) => {
-      console.warn("SFX playback error:", e);
+      if (__DEV__) console.warn("SFX playback error:", e);
     });
 }

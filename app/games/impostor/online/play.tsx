@@ -14,6 +14,7 @@ import { Button } from "../../../../src/components/Button";
 import { Timer } from "../../../../src/components/Timer";
 import { palette, spacing, typography } from "../../../../src/theme";
 import { ensureAnonymousAuth } from "../../../../src/firebase/rooms";
+import { auth } from "../../../../src/firebase/config";
 import {
   subscribeToSession,
   subscribeToImpostorRole,
@@ -25,6 +26,7 @@ import {
   setReturnedToLobby,
   kickPlayer,
   clearPendingRemoval,
+  addPointsOnline,
   type SessionData,
 } from "../../../../src/firebase/sessions";
 import { LeaveGameDialog } from "../../../../src/components/LeaveGameDialog";
@@ -32,7 +34,6 @@ import { KickPlayerModal } from "../../../../src/components/KickPlayerModal";
 import { BackButton } from "../../../../src/components/BackButton";
 import { ExitGameDialog } from "../../../../src/components/ExitGameDialog";
 import { useSessionStore } from "../../../../src/store/session";
-import { usePlayerStore } from "../../../../src/store/players";
 import type { PlayerRole } from "../../../../src/games/impostor/types";
 import { ImpostorIcon } from "../../../../src/assets/icons/ImpostorIcon";
 import { CrewmateIcon } from "../../../../src/assets/icons/CrewmateIcon";
@@ -45,6 +46,8 @@ const ACCENT = palette.impostor;
 interface MyRole {
   role: PlayerRole;
   word?: string;
+  hint?: string;
+  isEarly?: boolean;
 }
 
 function computeEliminationResult(
@@ -79,10 +82,6 @@ export default function OnlinePlayScreen() {
   const isHost = useSessionStore((s) => s.isHost);
   const scoringMode = useSessionStore((s) => s.scoringMode);
 
-  const localPlayers = usePlayerStore((s) => s.players);
-  const addPoints = usePlayerStore((s) => s.addPoints);
-  const linkFirebaseUid = usePlayerStore((s) => s.linkFirebaseUid);
-
   const [session, setSession] = useState<SessionData | null>(null);
   const [myRole, setMyRole] = useState<MyRole | null>(null);
   const [myUid, setMyUid] = useState<string | null>(null);
@@ -104,7 +103,11 @@ export default function OnlinePlayScreen() {
 
   // Resolve Firebase UID
   useEffect(() => {
-    ensureAnonymousAuth().then((user) => setMyUid(user.uid));
+    ensureAnonymousAuth()
+      .then((user) => setMyUid(user.uid))
+      .catch(() => {
+        if (auth.currentUser) setMyUid(auth.currentUser.uid);
+      });
   }, []);
 
   // Subscribe to session document
@@ -182,18 +185,10 @@ export default function OnlinePlayScreen() {
 
     setMyPtsEarned(pts);
 
-    if (pts > 0) {
-      const myName = sessionPlayers[myUid]?.name;
-      let local = localPlayers.find((p) => p.firebaseUid === myUid);
-      if (!local) {
-        local = localPlayers.find(
-          (p) => p.name.toLowerCase() === (myName ?? "").toLowerCase()
-        );
-        if (local) linkFirebaseUid(local.id, myUid);
-      }
-      if (local) addPoints(local.id, pts);
+    if (pts > 0 && sessionCode) {
+      addPointsOnline(sessionCode, myUid, pts).catch(() => {});
     }
-  }, [game?.status]);
+  }, [game?.status, myUid]);
 
   // ── Handlers ───────────────────────────────────────────────
 
@@ -286,8 +281,7 @@ export default function OnlinePlayScreen() {
   const exitDialog = isHost ? (
     <ExitGameDialog
       visible={showExitDialog}
-      onKeepScores={handleHostBackToHub}
-      onVoidPoints={handleHostBackToHub}
+      onVoidScores={handleHostBackToHub}
       onCancel={() => setShowExitDialog(false)}
     />
   ) : (
@@ -403,6 +397,12 @@ export default function OnlinePlayScreen() {
                       <Text style={styles.roleName}>You are the Impostor</Text>
                     </View>
                     <Text style={styles.roleTip}>You have NO word. Listen and bluff!</Text>
+                    {myRole?.isEarly && myRole?.hint && (
+                      <View style={styles.hintContainer}>
+                        <Text style={styles.hintLabel}>HINT</Text>
+                        <Text style={styles.hintText}>{myRole.hint}</Text>
+                      </View>
+                    )}
                   </View>
                 ) : (
                   <View style={styles.roleContent}>
@@ -420,15 +420,21 @@ export default function OnlinePlayScreen() {
           </View>
 
           <Text style={styles.sectionLabel}>
-            Players ({Object.keys(sessionPlayers).length})
+            Speaking Order ({Object.keys(sessionPlayers).length} players)
           </Text>
-          {Object.entries(sessionPlayers).map(([uid, { name }]) => (
-            <View key={uid} style={styles.playerRow}>
-              <Text style={styles.playerName}>{name}</Text>
-              {uid === myUid && <Text style={styles.youTag}>You</Text>}
-            </View>
-          ))}
+          {(game.speakingOrder ?? Object.keys(sessionPlayers)).map((uid, idx) => {
+            const playerName = sessionPlayers[uid]?.name ?? uid;
+            const isMe = uid === myUid;
+            return (
+              <View key={uid} style={styles.playerRow}>
+                <Text style={styles.speakerNumber}>{idx + 1}.</Text>
+                <Text style={styles.playerName}>{playerName}</Text>
+                {isMe && <Text style={styles.youTag}>You</Text>}
+              </View>
+            );
+          })}
 
+          <Text style={styles.timerOptionalTag}>Optional Timer:</Text>
           <View style={styles.timerBox}>
             <Timer initialSeconds={180} accentColor={ACCENT} />
           </View>
@@ -804,7 +810,7 @@ export default function OnlinePlayScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: palette.bg },
-  container: { padding: spacing.lg, paddingBottom: spacing.xxxl },
+  container: { padding: spacing.lg, paddingTop: 55, paddingBottom: spacing.xxxl },
 
   // ── Kick UI ─────────────────────────────────────────────────
   kickBanner: {
@@ -866,6 +872,25 @@ const styles = StyleSheet.create({
   roleName: { ...typography.heading2, color: palette.white },
   roleWord: { ...typography.display, color: palette.white },
   roleTip: { ...typography.caption, color: palette.muted, textAlign: "center" },
+  hintContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.15)",
+    alignItems: "center" as const,
+  },
+  hintLabel: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    color: "rgba(255,255,255,0.4)",
+    marginBottom: 4,
+  },
+  hintText: {
+    fontSize: 15,
+    color: "rgba(255,255,255,0.7)",
+    fontStyle: "italic" as const,
+    textAlign: "center" as const,
+  },
   roleLoading: { ...typography.body, color: palette.muted },
 
   playerRow: {
@@ -878,17 +903,26 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     padding: spacing.md,
     marginBottom: spacing.sm,
+    gap: spacing.sm,
   },
-  playerName: { ...typography.bodyBold, color: palette.white },
+  speakerNumber: { ...typography.caption, color: palette.muted, width: 20, textAlign: "center" },
+  playerName: { ...typography.bodyBold, color: palette.white, flex: 1 },
   youTag: { ...typography.caption, color: ACCENT },
 
+  timerOptionalTag: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#888888",
+    textAlign: "center",
+    marginTop: spacing.xl,
+  },
   timerBox: {
     backgroundColor: palette.bgCard,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: palette.border,
     padding: spacing.xl,
-    marginTop: spacing.xl,
+    marginTop: spacing.sm,
     marginBottom: spacing.sm,
   },
 

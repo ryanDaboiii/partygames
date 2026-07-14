@@ -68,7 +68,6 @@ export default function DiscussionScreen() {
     setWinnerSelection(name);
   };
 
-  const handleExitKeep = () => { reset(); router.replace('/hub'); };
   const handleExitVoid = () => {
     Object.entries(pointsAwardedThisGame).forEach(([id, pts]) => {
       if (pts > 0) addPoints(id, -pts);
@@ -96,15 +95,14 @@ export default function DiscussionScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ExitGameDialog
         visible={showExitDialog}
-        onKeepScores={handleExitKeep}
-        onVoidPoints={handleExitVoid}
+        onVoidScores={handleExitVoid}
         onCancel={() => setShowExitDialog(false)}
       />
       <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
 
         {/* Timer */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Timer</Text>
+          <Text style={styles.timerOptionalTag}>Optional Timer:</Text>
           {showTimer ? (
             <View style={styles.timerBox}>
               <Timer initialSeconds={180} accentColor={ACCENT} />
@@ -244,11 +242,17 @@ export default function DiscussionScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  container: { padding: spacing.lg, paddingBottom: spacing.xxxl, gap: spacing.xl },
+  container: { padding: spacing.lg, paddingTop: 110, paddingBottom: spacing.xxxl, gap: spacing.xl },
 
   section: { gap: spacing.md },
   sectionLabel: { ...typography.label, color: palette.muted },
 
+  timerOptionalTag: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#888888",
+    textAlign: "center",
+  },
   timerBox: {
     backgroundColor: palette.bgCard,
     borderRadius: 20,

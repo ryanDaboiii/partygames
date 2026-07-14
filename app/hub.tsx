@@ -36,6 +36,8 @@ import { MedalIcon } from "../src/assets/icons/MedalIcon";
 import { SparkleIcon } from "../src/assets/icons/SparkleIcon";
 import { XIcon } from "../src/assets/icons/XIcon";
 import AppLogo from "../src/components/AppLogo";
+import { BackButton } from "../src/components/BackButton";
+import { LeaveGameDialog } from "../src/components/LeaveGameDialog";
 const ACCENT = palette.wavelength;
 
 function getInitials(name: string): string {
@@ -64,6 +66,7 @@ export default function HubScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
+  const [leaveDialogVisible, setLeaveDialogVisible] = useState(false);
 
   // Online session live data (non-host uses this for player list & game routing)
   const [liveSession, setLiveSession] = useState<SessionData | null>(null);
@@ -294,15 +297,23 @@ export default function HubScreen() {
   // NON-HOST ONLINE: waiting screen with live leaderboard
   // ════════════════════════════════════════════════════════════════════════════
   if (mode === "online" && !isHost) {
-    // Merge online player list with local scores (UID-first, name fallback)
-    const leaderboard = (onlinePlayers ?? [])
-      .map(({ uid, name, isHostPlayer }) => {
-        const local = players.find(
-          (p) => p.firebaseUid === uid || p.name.toLowerCase() === name.toLowerCase()
-        );
-        return { uid, name, isHostPlayer, score: local?.totalScore ?? 0 };
-      })
-      .sort((a, b) => b.score - a.score);
+    const leaderboard = liveSession
+      ? Object.entries(liveSession.players)
+          .map(([uid, player]) => ({
+            uid,
+            name: player.name,
+            isHostPlayer: uid === liveSession.hostId,
+            score: player.totalScore ?? 0,
+          }))
+          .sort((a, b) => b.score - a.score)
+      : [];
+
+    const leaderboardRanks: number[] = [];
+    leaderboard.forEach((entry, i) => {
+      if (i === 0) leaderboardRanks.push(1);
+      else if (entry.score === leaderboard[i - 1].score) leaderboardRanks.push(leaderboardRanks[i - 1]);
+      else leaderboardRanks.push(i + 1);
+    });
 
     return (
       <SafeAreaView style={styles.safe}>
@@ -345,17 +356,17 @@ export default function HubScreen() {
                 {leaderboard.map(({ uid, name, isHostPlayer, score }, i) => (
                   <View key={uid} style={[
                     styles.leaderboardRow,
-                    i === 0 && score > 0 && styles.leaderboardRowFirst,
+                    leaderboardRanks[i] === 1 && score > 0 && styles.leaderboardRowFirst,
                   ]}>
                     <View style={{ width: 32, alignItems: "center", justifyContent: "center" }}>
-                      {i === 0 && score > 0 ? (
+                      {leaderboardRanks[i] === 1 && score > 0 ? (
                         <MedalIcon rank={1} size={26} />
-                      ) : i === 1 && score > 0 ? (
+                      ) : leaderboardRanks[i] === 2 && score > 0 ? (
                         <MedalIcon rank={2} size={26} />
-                      ) : i === 2 && score > 0 ? (
+                      ) : leaderboardRanks[i] === 3 && score > 0 ? (
                         <MedalIcon rank={3} size={26} />
                       ) : (
-                        <Text style={styles.leaderboardRank}>{i + 1}.</Text>
+                        <Text style={styles.leaderboardRank}>{leaderboardRanks[i]}.</Text>
                       )}
                     </View>
                     <View style={styles.avatar}>
@@ -373,7 +384,7 @@ export default function HubScreen() {
                           <Text style={styles.youBadgeText}>YOU</Text>
                         </View>
                       )}
-                      <Text style={[styles.leaderboardScore, i === 0 && score > 0 && { color: palette.warning }]}>
+                      <Text style={[styles.leaderboardScore, leaderboardRanks[i] === 1 && score > 0 && { color: palette.warning }]}>
                         {score} {score === 1 ? "pt" : "pts"}
                       </Text>
                     </View>
@@ -400,6 +411,13 @@ export default function HubScreen() {
           />
         </ScrollView>
 
+        <BackButton onPress={() => setLeaveDialogVisible(true)} color={palette.muted} />
+
+        <LeaveGameDialog
+          visible={leaveDialogVisible}
+          onLeave={handleLeaveSession}
+          onCancel={() => setLeaveDialogVisible(false)}
+        />
       </SafeAreaView>
     );
   }

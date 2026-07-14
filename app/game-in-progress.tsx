@@ -9,9 +9,11 @@ import {
 import { useRouter } from "expo-router";
 import { palette, spacing, typography } from "../src/theme";
 import { useSessionStore } from "../src/store/session";
-import { subscribeToSession, type SessionData } from "../src/firebase/sessions";
+import { subscribeToSession, setReturnedToLobby, type SessionData } from "../src/firebase/sessions";
+import { auth } from "../src/firebase/config";
 import { WaitingDotsIcon } from "../src/assets/icons/WaitingDotsIcon";
 import { BackButton } from "../src/components/BackButton";
+import { LeaveGameDialog } from "../src/components/LeaveGameDialog";
 import AppLogo from "../src/components/AppLogo";
 
 function getInitials(name: string): string {
@@ -44,6 +46,16 @@ export default function GameInProgressScreen() {
   const mode = useSessionStore((s) => s.mode);
 
   const [session, setSession] = useState<SessionData | null>(null);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+
+  const handleLeave = async () => {
+    setShowLeaveDialog(false);
+    const uid = auth.currentUser?.uid;
+    if (sessionCode && uid) {
+      try { await setReturnedToLobby(sessionCode, uid); } catch {}
+    }
+    router.replace("/hub");
+  };
 
   useEffect(() => {
     if (!sessionCode || mode !== "online") return;
@@ -108,7 +120,12 @@ export default function GameInProgressScreen() {
           <Text style={styles.waitingText}>Waiting for the host…</Text>
         </View>
       </ScrollView>
-      <BackButton onPress={() => router.replace('/hub')} />
+      <LeaveGameDialog
+        visible={showLeaveDialog}
+        onLeave={handleLeave}
+        onCancel={() => setShowLeaveDialog(false)}
+      />
+      <BackButton onPress={() => setShowLeaveDialog(true)} />
     </SafeAreaView>
   );
 }

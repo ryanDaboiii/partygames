@@ -11,10 +11,8 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { GameButton } from "../../../src/components/GameButton";
-import { HoldToReveal } from "../../../src/components/HoldToReveal";
 import { palette, spacing, typography, scaleFont, shadows } from "../../../src/theme";
 import { useSessionStore } from "../../../src/store/session";
-import { usePlayerStore } from "../../../src/store/players";
 import { ensureAnonymousAuth } from "../../../src/firebase/rooms";
 import { auth } from "../../../src/firebase/config";
 import {
@@ -30,25 +28,22 @@ import {
   startWavelengthCluePhase,
   advanceWavelengthClueTurn,
   advanceToWavelengthGuess,
+  requestWavelengthExtraClue,
   submitWavelengthGuess,
-  switchWavelengthCategory,
   startWavelengthRound,
   markWavelengthRevealed,
-  requestWavelengthExtraClue,
   clearWavelengthState,
   type WavelengthFSState,
   type WavelengthFSAssignment,
 } from "../../../src/firebase/wavelength";
 import { addPointsOnline } from "../../../src/firebase/sessions";
+import { HoldToReveal } from "../../../src/components/HoldToReveal";
 import { LeaveGameDialog } from "../../../src/components/LeaveGameDialog";
-import { KickPlayerModal } from "../../../src/components/KickPlayerModal";
-import { CrewmateIcon } from "../../../src/assets/icons/CrewmateIcon";
 import { CATEGORIES, pickCategories } from "../../../src/games/wavelength/categories";
 import { getGameTheme } from "../../../src/games/registry";
 import { BackButton } from "../../../src/components/BackButton";
 import { ExitGameDialog } from "../../../src/components/ExitGameDialog";
 import { EyesClosedIcon } from "../../../src/assets/icons/EyesClosedIcon";
-import { CategorySwitchIcon } from "../../../src/assets/icons/CategorySwitchIcon";
 import { HourglassIcon } from "../../../src/assets/icons/HourglassIcon";
 import { TargetIcon } from "../../../src/assets/icons/TargetIcon";
 import { CheckIcon } from "../../../src/assets/icons/CheckIcon";
@@ -57,7 +52,6 @@ import ConfettiCannon from "react-native-confetti-cannon";
 
 const GAME_THEME = getGameTheme("wavelength");
 const ACCENT = GAME_THEME.accent;
-const MAX_SWITCHES = 3;
 const PICKER_ITEM_H = 64;
 const PICKER_VISIBLE = 5;
 const { width: screenWidth } = Dimensions.get("window");
@@ -67,10 +61,6 @@ export default function WavelengthOnlineScreen() {
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const isHost = useSessionStore((s) => s.isHost);
 
-  const localPlayers = usePlayerStore((s) => s.players);
-  const addPoints = usePlayerStore((s) => s.addPoints);
-  const linkFirebaseUid = usePlayerStore((s) => s.linkFirebaseUid);
-
   const myPlayerName = useSessionStore((s) => s.myPlayerName);
   const scoringMode = useSessionStore((s) => s.scoringMode);
 
@@ -79,10 +69,12 @@ export default function WavelengthOnlineScreen() {
   const [myUid, setMyUid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [myRevealed, setMyRevealed] = useState(false);
+  const [isPeeking, setIsPeeking] = useState(false);
   const [guessValue, setGuessValue] = useState<number | null>(null);
-  const [showPlayerModal, setShowPlayerModal] = useState(false);
+  const [skipOffset, setSkipOffset] = useState(0);
 
   const scoredRoundRef = useRef(-1);
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     ensureAnonymousAuth()
@@ -91,13 +83,16 @@ export default function WavelengthOnlineScreen() {
         if (auth.currentUser) {
           setMyUid(auth.currentUser.uid);
         } else {
-          setTimeout(() => {
+          retryTimeoutRef.current = setTimeout(() => {
             ensureAnonymousAuth()
               .then((user) => setMyUid(user.uid))
-              .catch((e) => console.error('[WAVELENGTH] Auth failed after retry:', e));
+              .catch((e) => { if (__DEV__) console.error('[WAVELENGTH] Auth failed after retry:', e); });
           }, 1000);
         }
       });
+    return () => {
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -121,6 +116,8 @@ export default function WavelengthOnlineScreen() {
 
   useEffect(() => {
     setMyRevealed(false);
+    setIsPeeking(false);
+    setSkipOffset(0);
   }, [state?.round]);
 
   useEffect(() => {
@@ -141,17 +138,8 @@ export default function WavelengthOnlineScreen() {
         ? scoringMode === "extended" ? 3 : 1
         : scoringMode === "extended" ? 1 : 0
       : 0;
-    if (pts > 0) {
-      let local = localPlayers.find((p) => p.firebaseUid === myUid);
-      if (!local) {
-        const myName = state.playerNames[myUid];
-        local = localPlayers.find(
-          (p) => p.name.toLowerCase() === (myName ?? "").toLowerCase()
-        );
-        if (local) linkFirebaseUid(local.id, myUid);
-      }
-      if (local) addPoints(local.id, pts);
-      if (sessionCode) addPointsOnline(sessionCode, myUid, pts).catch(() => {});
+    if (pts > 0 && sessionCode) {
+      addPointsOnline(sessionCode, myUid, pts).catch(() => {});
     }
   }, [state?.phase, state?.round, myUid]);
 
@@ -181,8 +169,7 @@ export default function WavelengthOnlineScreen() {
   const exitDialog = isHost ? (
     <ExitGameDialog
       visible={showExitDialog}
-      onKeepScores={handleExitGame}
-      onVoidPoints={handleExitGame}
+      onVoidScores={handleExitGame}
       onCancel={() => setShowExitDialog(false)}
     />
   ) : (
@@ -196,7 +183,6 @@ export default function WavelengthOnlineScreen() {
   const backBtn = <BackButton onPress={() => setShowExitDialog(true)} color={GAME_THEME.accent} />;
 
   const handleKickFromModal = async (uid: string) => {
-    setShowPlayerModal(false);
     if (!sessionCode) return;
     try {
       const result = await kickPlayer(sessionCode, uid);
@@ -232,26 +218,9 @@ export default function WavelengthOnlineScreen() {
     </View>
   ) : null;
 
-  const kickModal = (
-    <KickPlayerModal
-      visible={showPlayerModal}
-      players={Object.entries(sessionPlayers).map(([uid, p]) => ({ uid, name: p.name }))}
-      myUid={myUid}
-      onKick={handleKickFromModal}
-      onClose={() => setShowPlayerModal(false)}
-    />
-  );
-
-  const playersBtn = isHost ? (
-    <Pressable style={styles.playersBtn} onPress={() => setShowPlayerModal(true)}>
-      <CrewmateIcon size={20} />
-    </Pressable>
-  ) : null;
-
   if (!state || !myUid) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
-        {kickModal}
         {backBtn}
         <View style={styles.center}>
           <Text style={styles.loadingText}>Connecting…</Text>
@@ -265,38 +234,12 @@ export default function WavelengthOnlineScreen() {
     (!state.assignments[myUid] && state.playerOrder.includes(myUid ?? ""));
   const guesserName = state.playerNames[state.guesserId] ?? "Guesser";
   const myAssignment = state.assignments[myUid] as WavelengthFSAssignment | undefined;
-  const mySwitches = state.categorySwitches[myUid] ?? 0;
-  const switchesLeft = MAX_SWITCHES - mySwitches;
 
   const cycleNumber = state.playerOrder.length > 0
     ? Math.ceil(state.round / state.playerOrder.length)
     : state.round;
 
-  const displayCat = (a: { categoryName: string; categoryLabel: string }) =>
-    state.categoryStyle === "simple" ? a.categoryName : (a.categoryLabel || a.categoryName);
-
-  const handleSwitchCategory = async () => {
-    if (!myUid || !sessionCode || switchesLeft <= 0) return;
-    const assignedLabels = new Set(
-      Object.values(state.assignments).map((a) => a.categoryLabel || a.categoryName)
-    );
-    const available = CATEGORIES.filter((c) => !assignedLabels.has(c.label));
-    if (available.length === 0) return;
-    const newCat = available[Math.floor(Math.random() * available.length)];
-    setBusy(true);
-    try {
-      await switchWavelengthCategory(
-        sessionCode,
-        myUid,
-        { categoryName: newCat.name, categoryLabel: newCat.label, categoryHint: newCat.hint },
-        mySwitches + 1,
-      );
-    } catch (e: any) {
-      Alert.alert("Error", e.message ?? "Could not switch category");
-    } finally {
-      setBusy(false);
-    }
-  };
+  const displayCat = (a: { categoryName: string }) => a.categoryName;
 
   const handleStartClues = async () => {
     if (!sessionCode) return;
@@ -326,28 +269,28 @@ export default function WavelengthOnlineScreen() {
     }
   };
 
-  const handleRequestExtraClue = async () => {
-    if (!sessionCode) return;
-    const eligiblePlayers = state.playerOrder.filter((uid) => uid !== state.guesserId);
-    if (eligiblePlayers.length === 0) return;
-    const selectedUid = eligiblePlayers[Math.floor(Math.random() * eligiblePlayers.length)];
-    setBusy(true);
-    try {
-      await requestWavelengthExtraClue(sessionCode, selectedUid);
-    } catch (e: any) {
-      Alert.alert("Error", e.message ?? "Could not request extra clue");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleReadyToGuess = async () => {
     if (!sessionCode) return;
     setBusy(true);
     try {
       await advanceToWavelengthGuess(sessionCode);
     } catch (e: any) {
-      Alert.alert("Error", e.message ?? "Could not advance");
+      Alert.alert("Error", e.message ?? "Could not advance to guess");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleOnlineExtraClue = async () => {
+    if (!sessionCode) return;
+    const nonGuessers = state.playerOrder.filter((uid) => uid !== state.guesserId);
+    if (nonGuessers.length === 0) return;
+    const selectedUid = nonGuessers[Math.floor(Math.random() * nonGuessers.length)];
+    setBusy(true);
+    try {
+      await requestWavelengthExtraClue(sessionCode, selectedUid);
+    } catch (e: any) {
+      Alert.alert("Error", e.message ?? "Could not request extra clue");
     } finally {
       setBusy(false);
     }
@@ -368,7 +311,7 @@ export default function WavelengthOnlineScreen() {
 
   const handleNextRound = async () => {
     if (!sessionCode) return;
-    const nextRound = state.round + 1;
+    const nextRound = state.round + 1 + skipOffset;
     const guesserIdx = (nextRound - 1) % state.playerOrder.length;
     const nextGuesserId = state.playerOrder[guesserIdx];
     const nonGuessers = state.playerOrder.filter((uid) => uid !== nextGuesserId);
@@ -376,7 +319,7 @@ export default function WavelengthOnlineScreen() {
     const cats = pickCategories(nonGuessers.length);
     const assignments: Record<string, WavelengthFSAssignment> = {};
     nonGuessers.forEach((uid, i) => {
-      assignments[uid] = { categoryName: cats[i].name, categoryLabel: cats[i].label, categoryHint: cats[i].hint };
+      assignments[uid] = { categoryName: cats[i].name };
     });
     setBusy(true);
     try {
@@ -401,6 +344,15 @@ export default function WavelengthOnlineScreen() {
     }
   };
 
+  const handleSkipNextTurn = () => {
+    const turnsLeft = state.totalTurns - state.round;
+    if (skipOffset + 1 >= turnsLeft) {
+      handleGameOver();
+      return;
+    }
+    setSkipOffset((prev) => prev + 1);
+  };
+
   const handleGameOver = async () => {
     if (!sessionCode) return;
     try {
@@ -423,7 +375,6 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
-          {kickModal}
           {kickBannerNode}
           <View style={styles.page}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
@@ -431,7 +382,7 @@ export default function WavelengthOnlineScreen() {
               <EyesClosedIcon size={64} />
               <Text style={styles.bigTitle}>You're the Guesser!</Text>
               <Text style={styles.mutedBody}>
-                Everyone else is memorising their number and category. Look away!
+                Everyone else is peeking at the secret number. Look away!
               </Text>
             </View>
             {allRevealed ? (
@@ -446,13 +397,12 @@ export default function WavelengthOnlineScreen() {
             ) : (
               <View style={styles.waitingPill}>
                 <Text style={styles.waitingText}>
-                  Waiting for everyone to reveal… ({revealedBy.length} of {nonGuesserCount} ready)
+                  Waiting for everyone to peek… ({revealedBy.length} of {nonGuesserCount} ready)
                 </Text>
               </View>
             )}
           </View>
           {backBtn}
-          {playersBtn}
         </SafeAreaView>
       );
     }
@@ -461,12 +411,10 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
-          {kickModal}
           <View style={styles.center}>
             <Text style={styles.loadingText}>Connecting…</Text>
           </View>
           {backBtn}
-          {playersBtn}
         </SafeAreaView>
       );
     }
@@ -474,62 +422,39 @@ export default function WavelengthOnlineScreen() {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
         {exitDialog}
-        {kickModal}
         {kickBannerNode}
         <ScrollView contentContainerStyle={styles.scrollPage} showsVerticalScrollIndicator={false}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
 
           <HoldToReveal
             accentColor={ACCENT}
-            holdDuration={800}
-            holdLabel="Hold to reveal your number and category"
+            holdLabel="Hold to reveal"
             onReveal={() => {
               setMyRevealed(true);
-              if (myUid && sessionCode) {
-                markWavelengthRevealed(sessionCode, myUid).catch(() => {});
-              }
+              if (myUid && sessionCode) markWavelengthRevealed(sessionCode, myUid).catch(() => {});
             }}
           >
             <View style={styles.revealCard}>
-              <Text style={styles.cardSubLabel}>The secret number is</Text>
+              <Text style={styles.cardSubLabel}>Secret number</Text>
               <Text style={[styles.secretNumber, { color: ACCENT }]}>{state.secretNumber}</Text>
               <Text style={styles.cardSubLabel}>out of {state.range}</Text>
-              <View style={styles.divider} />
-              <Text style={[styles.categoryChipLabel, { color: ACCENT }]}>YOUR CATEGORY</Text>
-              <Text style={styles.categoryName}>{displayCat(myAssignment)}</Text>
-              {state.categoryStyle === "specific" && (
-                <Text style={styles.categoryHint}>{myAssignment.categoryHint}</Text>
+              {myAssignment && (
+                <>
+                  <View style={styles.divider} />
+                  <Text style={styles.categoryChipLabel}>YOUR CATEGORY</Text>
+                  <Text style={styles.categoryName}>{displayCat(myAssignment)}</Text>
+                </>
               )}
             </View>
           </HoldToReveal>
 
           {myRevealed && (
-            <>
-              <View style={styles.switchRow}>
-                {switchesLeft > 0 ? (
-                  <Pressable
-                    style={[styles.switchBtn, busy && { opacity: 0.5 }]}
-                    onPress={handleSwitchCategory}
-                    disabled={busy}
-                  >
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                      <CategorySwitchIcon size={20} />
-                      <Text style={styles.switchBtnText}>New category ({switchesLeft} left)</Text>
-                    </View>
-                  </Pressable>
-                ) : (
-                  <Text style={styles.switchExhausted}>No more switches this round</Text>
-                )}
-              </View>
-
-              <View style={styles.waitingPill}>
-                <Text style={styles.waitingText}>Waiting for guesser to start clues…</Text>
-              </View>
-            </>
+            <View style={styles.waitingPill}>
+              <Text style={styles.waitingText}>Waiting for guesser to start clues…</Text>
+            </View>
           )}
         </ScrollView>
         {backBtn}
-        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -548,7 +473,6 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
-          {kickModal}
           {kickBannerNode}
           <View style={styles.page}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
@@ -573,7 +497,6 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
-          {kickModal}
           {kickBannerNode}
           <ScrollView contentContainerStyle={styles.scrollPage} showsVerticalScrollIndicator={false}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
@@ -589,9 +512,6 @@ export default function WavelengthOnlineScreen() {
               <View style={styles.divider} />
               <Text style={styles.categoryChipLabel}>YOUR CATEGORY</Text>
               <Text style={styles.categoryName}>{myAssignment ? displayCat(myAssignment) : ""}</Text>
-              {state.categoryStyle === "specific" && (
-                <Text style={styles.categoryHint}>{myAssignment?.categoryHint}</Text>
-              )}
             </View>
 
             <Text style={styles.instruction}>
@@ -614,7 +534,6 @@ export default function WavelengthOnlineScreen() {
             />
           </ScrollView>
           {backBtn}
-          {playersBtn}
         </SafeAreaView>
       );
     }
@@ -622,7 +541,6 @@ export default function WavelengthOnlineScreen() {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
         {exitDialog}
-        {kickModal}
         {kickBannerNode}
         <View style={styles.page}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
@@ -632,6 +550,23 @@ export default function WavelengthOnlineScreen() {
             <Text style={[styles.subTitle, { color: ACCENT }]}>{activeName} is giving their clue</Text>
           </View>
           <ClueSoFarList givers={pastGivers} />
+          {myAssignment && (
+            <View style={styles.reminderCard}>
+              <Text style={styles.categoryChipLabel}>YOUR CATEGORY</Text>
+              <Text style={styles.categoryName}>{displayCat(myAssignment)}</Text>
+              <Pressable
+                style={styles.reminderPeekBtn}
+                onPressIn={() => setIsPeeking(true)}
+                onPressOut={() => setIsPeeking(false)}
+              >
+                {isPeeking ? (
+                  <Text style={styles.reminderPeekNumber}>{state.secretNumber}</Text>
+                ) : (
+                  <Text style={styles.reminderPeekHint}>Hold to see number</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
           <View style={styles.waitingPill}>
             <Text style={styles.waitingText}>
               Clue {state.currentTurnIndex + 1} of {state.turnOrder.length}
@@ -639,7 +574,6 @@ export default function WavelengthOnlineScreen() {
           </View>
         </View>
         {backBtn}
-        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -651,20 +585,16 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
-          {kickModal}
           {kickBannerNode}
           <View style={styles.page}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
             <View style={styles.center}>
-              <Text style={styles.bigTitle}>Time to think!</Text>
-              <Text style={styles.mutedBody}>
-                You heard everyone's clues.{"\n"}
-                Think of a number between{" "}
-                <Text style={{ color: ACCENT, fontWeight: "900" }}>1 and {state.range}</Text>.
-              </Text>
+              <TargetIcon size={64} />
+              <Text style={styles.bigTitle}>All clues given!</Text>
+              <Text style={styles.mutedBody}>Ready to make your guess?</Text>
             </View>
             <GameButton
-              label={busy ? "Loading…" : "I'm ready to guess →"}
+              label={busy ? "…" : "Yes, I'm ready to guess →"}
               onPress={handleReadyToGuess}
               color={ACCENT}
               textColor={GAME_THEME.text}
@@ -672,8 +602,8 @@ export default function WavelengthOnlineScreen() {
               disabled={busy}
             />
             <Pressable
-              style={[styles.extraClueBtn, busy && { opacity: 0.5 }]}
-              onPress={handleRequestExtraClue}
+              style={[styles.extraClueBtn, { opacity: busy ? 0.5 : 1 }]}
+              onPress={handleOnlineExtraClue}
               disabled={busy}
             >
               <Text style={styles.extraClueBtnText}>Need one more clue?</Text>
@@ -687,20 +617,19 @@ export default function WavelengthOnlineScreen() {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
         {exitDialog}
-        {kickModal}
         {kickBannerNode}
         <View style={styles.page}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
           <View style={styles.center}>
-            <Text style={styles.bigTitle}>{guesserName} is thinking…</Text>
-            <Text style={styles.mutedBody}>No more clues — shh!</Text>
+            <HourglassIcon size={64} />
+            <Text style={styles.bigTitle}>{guesserName} is deciding…</Text>
+            <Text style={styles.mutedBody}>They may ask for one more clue</Text>
           </View>
           <View style={styles.waitingPill}>
-            <Text style={styles.waitingText}>Waiting for {guesserName} to be ready…</Text>
+            <Text style={styles.waitingText}>Waiting for {guesserName}</Text>
           </View>
         </View>
         {backBtn}
-        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -715,7 +644,6 @@ export default function WavelengthOnlineScreen() {
       return (
         <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
           {exitDialog}
-          {kickModal}
           <View style={styles.page}>
             <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
 
@@ -741,13 +669,14 @@ export default function WavelengthOnlineScreen() {
               disabled={busy}
             />
           </View>
+          {backBtn}
         </SafeAreaView>
       );
     }
 
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
-        {kickModal}
+        {exitDialog}
         <View style={styles.page}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
           <View style={styles.center}>
@@ -759,6 +688,7 @@ export default function WavelengthOnlineScreen() {
             <Text style={styles.waitingText}>Waiting for {guesserName} to submit</Text>
           </View>
         </View>
+        {backBtn}
       </SafeAreaView>
     );
   }
@@ -767,12 +697,15 @@ export default function WavelengthOnlineScreen() {
 
   if (state.phase === "result") {
     const correct = state.result?.correct ?? false;
-    const isLastRound = state.round >= state.totalTurns;
+    const turnsLeft = state.totalTurns - state.round;
+    const isGameOver = turnsLeft <= 0;
+    const nextGuesserIdx = state.playerOrder.length > 0 ? (state.round + skipOffset) % state.playerOrder.length : 0;
+    const nextGuesserName = state.playerNames[state.playerOrder[nextGuesserIdx]] ?? "next player";
+    const skipWouldEndGame = skipOffset + 1 >= turnsLeft;
 
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
         {exitDialog}
-        {kickModal}
         {kickBannerNode}
         <ScrollView contentContainerStyle={styles.scrollPage} showsVerticalScrollIndicator={false}>
           <RoundBadge cycle={cycleNumber} totalRounds={state.totalRounds} />
@@ -839,20 +772,35 @@ export default function WavelengthOnlineScreen() {
             )}
           </View>
 
+          {!isGameOver && (
+            <Text style={styles.nextPlayerText}>Next up: {nextGuesserName}</Text>
+          )}
+
           {isHost ? (
-            <GameButton
-              label={busy ? "Loading…" : isLastRound ? "Back to Hub" : "Next Round →"}
-              onPress={isLastRound ? handleGameOver : handleNextRound}
-              color={ACCENT}
-              textColor={GAME_THEME.text}
-              fullWidth
-              disabled={busy}
-              style={styles.hostActionBtn}
-            />
+            <>
+              <GameButton
+                label={busy ? "Loading…" : isGameOver ? "Back to Hub" : "Next Round →"}
+                onPress={isGameOver ? handleGameOver : handleNextRound}
+                color={ACCENT}
+                textColor={GAME_THEME.text}
+                fullWidth
+                disabled={busy}
+                style={styles.hostActionBtn}
+              />
+              {!isGameOver && (
+                <Pressable
+                  style={[styles.skipBtn, busy && { opacity: 0.4 }]}
+                  onPress={handleSkipNextTurn}
+                  disabled={busy}
+                >
+                  <Text style={styles.skipBtnText}>{skipWouldEndGame ? "End game" : "Skip next turn"}</Text>
+                </Pressable>
+              )}
+            </>
           ) : (
             <View style={styles.waitingPill}>
               <Text style={styles.waitingText}>
-                {isLastRound
+                {isGameOver
                   ? "Game over — waiting for host…"
                   : "Waiting for host to start next round…"}
               </Text>
@@ -870,7 +818,6 @@ export default function WavelengthOnlineScreen() {
           />
         )}
         {backBtn}
-        {playersBtn}
       </SafeAreaView>
     );
   }
@@ -1021,25 +968,62 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   kickBannerBtnText: { ...typography.caption, color: palette.white, fontWeight: "700" as const },
-  playersBtn: {
-    position: "absolute" as const,
-    top: spacing.lg,
-    right: spacing.lg,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: palette.bgCard,
+  reminderCard: {
+    backgroundColor: GAME_THEME.accentMuted,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: palette.border,
+    borderColor: ACCENT,
+    padding: spacing.lg,
     alignItems: "center",
-    justifyContent: "center",
-    zIndex: 100,
+    gap: spacing.sm,
+  },
+  reminderPeekBtn: {
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.2)",
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  reminderPeekNumber: {
+    color: palette.white,
+    fontSize: 28,
+    fontWeight: "bold" as const,
+  },
+  reminderPeekHint: {
+    color: "rgba(255,255,255,0.4)",
+    fontSize: 13,
+    fontStyle: "italic" as const,
+  },
+
+  skipBtn: {
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.3)",
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    width: "100%",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  skipBtnText: {
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 17,
+    fontWeight: "bold" as const,
+  },
+  nextPlayerText: {
+    fontSize: 22,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.6)",
+    textAlign: "center",
+    marginTop: 8,
   },
 
   page: {
     flex: 1,
     padding: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: 36,
     gap: spacing.lg,
     justifyContent: "space-between",
   },
@@ -1069,7 +1053,7 @@ const styles = StyleSheet.create({
 
   categoryChipLabel: { ...typography.label, color: ACCENT },
   categoryName: { ...typography.heading2, color: palette.white },
-  categoryHint: { ...typography.caption, color: palette.muted },
+
   switchRow: { alignItems: "flex-start" },
   switchBtn: {
     backgroundColor: GAME_THEME.accentMuted,
@@ -1193,7 +1177,7 @@ const styles = StyleSheet.create({
 
 const rbStyles = StyleSheet.create({
   badge: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     backgroundColor: ACCENT + "22",
     borderRadius: 10,
     borderWidth: 1,

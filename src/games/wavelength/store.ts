@@ -16,7 +16,6 @@ interface WavelengthStore {
   roundNumber: number;
   currentRound: CurrentRound | null;
   history: RoundResult[];
-  categoryStyle: "specific" | "simple";
   pointsAwardedThisGame: Record<string, number>;
 
   startGame: (setup: WavelengthSetup) => void;
@@ -24,6 +23,7 @@ interface WavelengthStore {
   switchCategory: (playerIndex: number) => void;
   recordExtraClueCategory: (id: string) => void;
   submitResult: (correct: boolean) => void;
+  skipRound: () => void;
   reset: () => void;
 }
 
@@ -36,7 +36,6 @@ const INITIAL = {
   roundNumber: 1,
   currentRound: null as CurrentRound | null,
   history: [] as RoundResult[],
-  categoryStyle: "simple" as "specific" | "simple",
   pointsAwardedThisGame: {} as Record<string, number>,
 };
 
@@ -53,7 +52,6 @@ export const useWavelengthStore = create<WavelengthStore>((set, get) => ({
       roundNumber: 1,
       currentRound: null,
       history: [],
-      categoryStyle: setup.categoryStyle,
       pointsAwardedThisGame: {},
     });
   },
@@ -160,6 +158,17 @@ export const useWavelengthStore = create<WavelengthStore>((set, get) => ({
       currentRound: null,
       phase: isOver ? "game-over" : "playing",
       pointsAwardedThisGame: updatedPointsAwarded,
+    });
+  },
+
+  skipRound: () => {
+    const { roundNumber, totalTurns } = get();
+    const nextRound = roundNumber + 1;
+    const isOver = nextRound > totalTurns;
+    set({
+      roundNumber: nextRound,
+      currentRound: null,
+      phase: isOver ? "game-over" : "playing",
     });
   },
 

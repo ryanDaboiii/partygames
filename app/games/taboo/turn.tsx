@@ -11,7 +11,7 @@ import { palette, spacing, typography, scaleFont, shadows } from "../../../src/t
 import { useTabooStore, getCurrentCluegiver } from "../../../src/games/taboo/store";
 import { usePlayerStore } from "../../../src/store/players";
 import { useSessionStore } from "../../../src/store/session";
-import { clearSessionCurrentGame } from "../../../src/firebase/sessions";
+import { clearSessionCurrentGame, subscribeToSession, addPointsOnline } from "../../../src/firebase/sessions";
 import { MAX_PASSES_PER_TURN } from "../../../src/games/taboo/logic";
 import { getGameTheme } from "../../../src/games/registry";
 import { BackButton } from "../../../src/components/BackButton";
@@ -51,20 +51,35 @@ export default function TurnScreen() {
   const mode = useSessionStore((s) => s.mode);
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const isHost = useSessionStore((s) => s.isHost);
+  const scoringMode = useSessionStore((s) => s.scoringMode);
 
   const [timeLeft, setTimeLeft] = useState(roundTimeSecs);
   const [isPaused, setIsPaused] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
+  const [onlinePlayers, setOnlinePlayers] = useState<Record<string, { name: string }>>({});
+
+  useEffect(() => {
+    if (mode !== "online" || !sessionCode) return;
+    return subscribeToSession(sessionCode, (data) => setOnlinePlayers(data.players));
+  }, [mode, sessionCode]);
 
   const cluegiver = getCurrentCluegiver(players, totalTurnsPlayed);
   const card = deck[cardIndex % deck.length];
 
   useEffect(() => {
     if (phase === "turn-recap") {
-      const match = localPlayers.find(
-        (p) => p.name.toLowerCase() === cluegiver.toLowerCase()
-      );
-      if (match) addPoints(match.id, turnNetScore);
+      if (scoringMode === "extended" && turnNetScore > 0) {
+        const match = localPlayers.find(
+          (p) => p.name.toLowerCase() === cluegiver.toLowerCase()
+        );
+        if (match) addPoints(match.id, turnNetScore);
+        if (mode === "online" && isHost && sessionCode) {
+          const uid = Object.entries(onlinePlayers).find(
+            ([, p]) => p.name.toLowerCase() === cluegiver.toLowerCase()
+          )?.[0];
+          if (uid) addPointsOnline(sessionCode, uid, turnNetScore).catch(() => {});
+        }
+      }
       router.replace("/games/taboo/recap");
     }
     if (phase === "setup") router.replace("/games/taboo");
@@ -102,26 +117,15 @@ export default function TurnScreen() {
   const handleGotIt = () => { playSfx("correct"); gotItAction(); };
   const handleTaboo = () => { playSfx("wrong"); tabooAction(); };
 
-  const handleExitKeep = async () => {
-    const partialScore = Math.max(0, turnCorrect - turnTaboos);
-    if (partialScore > 0) {
-      const match = localPlayers.find((p) => p.name.toLowerCase() === cluegiver.toLowerCase());
-      if (match) addPoints(match.id, partialScore);
-    }
-    if (mode === "online" && isHost && sessionCode) {
-      try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
-    }
-    reset();
-    router.replace('/hub');
-  };
-
   const handleExitVoid = async () => {
-    Object.entries(gamePoints).forEach(([name, pts]) => {
-      if (pts > 0) {
-        const match = localPlayers.find((p) => p.name.toLowerCase() === name.toLowerCase());
-        if (match) addPoints(match.id, -pts);
-      }
-    });
+    if (scoringMode === "extended") {
+      Object.entries(gamePoints).forEach(([name, pts]) => {
+        if (pts > 0) {
+          const match = localPlayers.find((p) => p.name.toLowerCase() === name.toLowerCase());
+          if (match) addPoints(match.id, -pts);
+        }
+      });
+    }
     if (mode === "online" && isHost && sessionCode) {
       try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
     }
@@ -133,8 +137,7 @@ export default function TurnScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ExitGameDialog
         visible={showExitDialog}
-        onKeepScores={handleExitKeep}
-        onVoidPoints={handleExitVoid}
+        onVoidScores={handleExitVoid}
         onCancel={() => setShowExitDialog(false)}
       />
       {/* Player name and live points */}
@@ -152,7 +155,6 @@ export default function TurnScreen() {
           <PauseIcon size={20} />
         </Pressable>
       </View>
-
       {/* Card */}
       <View style={styles.cardArea}>
         <View style={styles.card}>
@@ -270,7 +272,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   playerName: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: "bold",
     color: "#FFFFFF",
     textAlign: "center",
@@ -357,7 +359,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: spacing.md,
     padding: spacing.lg,
-    paddingBottom: spacing.xl,
+    paddingBottom: 36,
   },
   passBtn: {
     flex: 1,

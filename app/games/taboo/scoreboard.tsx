@@ -11,8 +11,9 @@ import { useRouter } from "expo-router";
 import { GameButton } from "../../../src/components/GameButton";
 import { palette, spacing, typography, shadows } from "../../../src/theme";
 import { useTabooStore } from "../../../src/games/taboo/store";
+import { usePlayerStore } from "../../../src/store/players";
 import { useSessionStore } from "../../../src/store/session";
-import { clearSessionCurrentGame } from "../../../src/firebase/sessions";
+import { clearSessionCurrentGame, subscribeToSession, addPointsOnline } from "../../../src/firebase/sessions";
 import { getGameTheme } from "../../../src/games/registry";
 import { HandshakeIcon } from "../../../src/assets/icons/HandshakeIcon";
 import { TrophyIcon } from "../../../src/assets/icons/TrophyIcon";
@@ -43,12 +44,60 @@ export default function TabooScoreboardScreen() {
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const scoringMode = useSessionStore((s) => s.scoringMode);
 
+  const addPoints = usePlayerStore((s) => s.addPoints);
+  const localPlayers = usePlayerStore((s) => s.players);
+  const hasAwardedRef = React.useRef(false);
+
+  const [onlinePlayers, setOnlinePlayers] = React.useState<Record<string, { name: string }>>({});
+
+  React.useEffect(() => {
+    if (mode !== "online" || !sessionCode) return;
+    return subscribeToSession(sessionCode, (data) => setOnlinePlayers(data.players));
+  }, [mode, sessionCode]);
+
   useEffect(() => { playSfx("fanfare"); }, []);
+
+  // Conventional mode: award +1 to the player(s) with the most correct cards at game end.
+  // Extended mode awards happen per-turn in turn.tsx, so nothing to do here.
+  useEffect(() => {
+    if (scoringMode !== "conventional" || hasAwardedRef.current) return;
+    if (mode === "online" && Object.keys(onlinePlayers).length === 0) return;
+    hasAwardedRef.current = true;
+
+    const totals: Record<string, number> = {};
+    for (const turn of turnHistory) {
+      totals[turn.cluegiver] = (totals[turn.cluegiver] ?? 0) + turn.correct;
+    }
+
+    const topCorrect = players.length > 0
+      ? Math.max(...players.map((n) => totals[n] ?? 0))
+      : 0;
+    if (topCorrect === 0) return;
+
+    const conventionalWinners = players.filter((n) => (totals[n] ?? 0) === topCorrect);
+    for (const name of conventionalWinners) {
+      const match = localPlayers.find((p) => p.name.toLowerCase() === name.toLowerCase());
+      if (match) addPoints(match.id, 1);
+      if (mode === "online" && sessionCode) {
+        const uid = Object.entries(onlinePlayers).find(
+          ([, p]) => p.name.toLowerCase() === name.toLowerCase()
+        )?.[0];
+        if (uid) addPointsOnline(sessionCode, uid, 1).catch(() => {});
+      }
+    }
+  }, [onlinePlayers]);
 
   const ranked = [...players].sort((a, b) => (gamePoints[b] ?? 0) - (gamePoints[a] ?? 0));
   const topScore = ranked.length > 0 ? (gamePoints[ranked[0]] ?? 0) : 0;
   const winners = ranked.filter((n) => (gamePoints[n] ?? 0) === topScore);
   const isTie = winners.length !== 1;
+
+  const tabooRanks: number[] = [];
+  ranked.forEach((name, i) => {
+    if (i === 0) tabooRanks.push(1);
+    else if ((gamePoints[name] ?? 0) === (gamePoints[ranked[i - 1]] ?? 0)) tabooRanks.push(tabooRanks[i - 1]);
+    else tabooRanks.push(i + 1);
+  });
 
   const playerStats: Record<string, { correct: number; passed: number; taboos: number }> = {};
   for (const p of players) playerStats[p] = { correct: 0, passed: 0, taboos: 0 };
@@ -92,7 +141,8 @@ export default function TabooScoreboardScreen() {
             const isWinner = winners.includes(name);
             const pts = gamePoints[name] ?? 0;
             const stats = playerStats[name];
-            const medalEl = idx === 0 ? <MedalIcon rank={1} size={28} /> : idx === 1 ? <MedalIcon rank={2} size={28} /> : idx === 2 ? <MedalIcon rank={3} size={28} /> : null;
+            const rank = tabooRanks[idx];
+            const medalEl = rank === 1 ? <MedalIcon rank={1} size={28} /> : rank === 2 ? <MedalIcon rank={2} size={28} /> : rank === 3 ? <MedalIcon rank={3} size={28} /> : null;
 
             return (
               <View
@@ -100,7 +150,7 @@ export default function TabooScoreboardScreen() {
                 style={[styles.rankRow, isWinner && styles.rankRowWinner]}
               >
                 <View style={{ width: 36, alignItems: "center", justifyContent: "center" }}>
-                  {medalEl ?? <Text style={styles.medal}>{idx + 1}.</Text>}
+                  {medalEl ?? <Text style={styles.medal}>{rank}.</Text>}
                 </View>
                 <View style={styles.rankInfo}>
                   <Text style={[styles.rankName, isWinner && { color: ACCENT }]}>{name}</Text>

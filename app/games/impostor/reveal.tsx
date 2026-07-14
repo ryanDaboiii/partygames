@@ -27,6 +27,8 @@ export default function RevealScreen() {
   const advanceReveal = useImpostorStore((s) => s.advanceReveal);
   const startDiscussion = useImpostorStore((s) => s.startDiscussion);
   const reset = useImpostorStore((s) => s.reset);
+  const impostorHint = useImpostorStore((s) => s.impostorHint);
+  const speakingOrder = useImpostorStore((s) => s.speakingOrder);
 
   const [readyToPass, setReadyToPass] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
@@ -38,6 +40,10 @@ export default function RevealScreen() {
   if (!current) return null;
 
   const isImpostor = current.role === "impostor";
+  const isEarlyImpostor = isImpostor && (
+    speakingOrder[0]?.id === current.player.id ||
+    speakingOrder[1]?.id === current.player.id
+  );
 
   const handleNext = () => {
     setReadyToPass(false);
@@ -49,14 +55,13 @@ export default function RevealScreen() {
     }
   };
 
-  const handleExitKeep = () => { reset(); router.replace('/hub'); };
+  const handleExit = () => { reset(); router.replace('/hub'); };
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ExitGameDialog
         visible={showExitDialog}
-        onKeepScores={handleExitKeep}
-        onVoidPoints={handleExitKeep}
+        onVoidScores={handleExit}
         onCancel={() => setShowExitDialog(false)}
       />
       <View style={styles.container}>
@@ -117,7 +122,9 @@ export default function RevealScreen() {
                 onReveal={() => {}}
                 onHide={() => setReadyToPass(true)}
               >
-                {isImpostor ? <ImpostorCard /> : <CrewmateCard word={current.word!} />}
+                {isImpostor
+                ? <ImpostorCard hint={isEarlyImpostor ? impostorHint : undefined} />
+                : <CrewmateCard word={current.word!} />}
               </HoldToReveal>
             </View>
 
@@ -150,7 +157,7 @@ function CrewmateCard({ word }: { word: string }) {
   );
 }
 
-function ImpostorCard() {
+function ImpostorCard({ hint }: { hint?: string }) {
   return (
     <View style={revealStyles.content}>
       <Text style={revealStyles.roleLabel}>You are the</Text>
@@ -162,6 +169,12 @@ function ImpostorCard() {
       <Text style={revealStyles.tip}>
         You have NO word. Listen to others' clues and bluff your way through!
       </Text>
+      {hint && (
+        <View style={revealStyles.hintContainer}>
+          <Text style={revealStyles.hintLabel}>HINT</Text>
+          <Text style={revealStyles.hintText}>{hint}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -184,6 +197,25 @@ const revealStyles = StyleSheet.create({
   wordLabel: { ...typography.label, color: GAME_THEME.textMuted },
   word: { ...typography.display, color: palette.white, textAlign: "center" },
   tip: { ...typography.caption, color: GAME_THEME.textMuted, textAlign: "center", marginTop: spacing.sm },
+  hintContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255,255,255,0.15)",
+    alignItems: "center" as const,
+  },
+  hintLabel: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    color: "rgba(255,255,255,0.4)",
+    marginBottom: 4,
+  },
+  hintText: {
+    fontSize: 15,
+    color: "rgba(255,255,255,0.7)",
+    fontStyle: "italic" as const,
+    textAlign: "center" as const,
+  },
 });
 
 const styles = StyleSheet.create({

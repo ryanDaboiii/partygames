@@ -43,6 +43,7 @@ export interface SessionImpostorGame {
   votes: Record<string, string>; // voterId → targetPlayerId
   eliminatedPlayerId: string | null;
   impostorCaught: boolean | null;
+  speakingOrder?: string[];
 }
 
 export interface SessionData {
@@ -173,17 +174,24 @@ export async function startImpostorGame(
   impostorCount: number,
   votingMode: "app" | "host" = "app"
 ): Promise<void> {
-  const secretWord = getRandomWord(category);
+  const { word: secretWord, hint: impostorHint } = getRandomWord(category);
   const playerUids = Object.keys(sessionPlayers);
   const shuffled = [...playerUids].sort(() => Math.random() - 0.5);
   const impostorUidSet = new Set(shuffled.slice(0, impostorCount));
 
+  // Generate a speaking order to determine if an impostor goes early (position 0 or 1)
+  const speakingOrder = [...playerUids].sort(() => Math.random() - 0.5);
+
   // Write each player's private role doc under the session
   for (const uid of playerUids) {
     const role: PlayerRole = impostorUidSet.has(uid) ? "impostor" : "crewmate";
+    const speakingPosition = speakingOrder.indexOf(uid);
+    const isEarly = speakingPosition === 0 || speakingPosition === 1;
     await setDoc(doc(db, "sessions", sessionCode, "impostorRoles", uid), {
       role,
-      ...(role === "crewmate" ? { word: secretWord } : {}),
+      ...(role === "crewmate"
+        ? { word: secretWord }
+        : { hint: impostorHint, isEarly }),
     });
   }
 
@@ -198,6 +206,7 @@ export async function startImpostorGame(
       votes: {},
       eliminatedPlayerId: null,
       impostorCaught: null,
+      speakingOrder,
     },
   });
 }
@@ -205,12 +214,12 @@ export async function startImpostorGame(
 export function subscribeToImpostorRole(
   sessionCode: string,
   uid: string,
-  cb: (role: { role: PlayerRole; word?: string } | null) => void
+  cb: (role: { role: PlayerRole; word?: string; hint?: string; isEarly?: boolean } | null) => void
 ): () => void {
   return onSnapshot(
     doc(db, "sessions", sessionCode, "impostorRoles", uid),
     (snap) => {
-      if (snap.exists()) cb(snap.data() as { role: PlayerRole; word?: string });
+      if (snap.exists()) cb(snap.data() as { role: PlayerRole; word?: string; hint?: string; isEarly?: boolean });
       else cb(null);
     }
   );

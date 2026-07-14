@@ -14,11 +14,9 @@ export type GameMusicId = keyof typeof tracks;
 
 let currentSound: Audio.Sound | null = null;
 let _muted = false;
-let _pendingTrack: GameMusicId | null = null;
 let isChanging = false;
 
 export function stopMusic() {
-  _pendingTrack = null;
   if (currentSound) {
     const s = currentSound;
     currentSound = null;
@@ -39,7 +37,7 @@ export async function playMusic(gameId: GameMusicId) {
     });
     currentSound = sound;
   } catch (e) {
-    console.warn("Music load failed:", e);
+    if (__DEV__) console.warn("Music load failed:", e);
   } finally {
     isChanging = false;
   }

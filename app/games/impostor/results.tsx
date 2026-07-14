@@ -28,7 +28,6 @@ import { playSfx } from "../../../src/hooks/useSoundEffects";
 
 const GAME_THEME = getGameTheme("impostor");
 const ACCENT = GAME_THEME.accent;
-const POINTS_PER_WIN = 1;
 const { width: screenWidth } = Dimensions.get("window");
 
 export default function ResultsScreen() {
@@ -38,6 +37,7 @@ export default function ResultsScreen() {
   const secretWord = useImpostorStore((s) => s.secretWord);
   const reset = useImpostorStore((s) => s.reset);
   const addPoints = usePlayerStore((s) => s.addPoints);
+  const scoringMode = useSessionStore((s) => s.scoringMode);
 
   const [winnerSelection, setWinnerSelection] = useState<string | null>(null);
 
@@ -52,19 +52,25 @@ export default function ResultsScreen() {
 
   const handleAwardCrewmates = () => {
     if (winnerSelection) return;
-    crewmates.forEach((p) => addPoints(p.id, POINTS_PER_WIN));
+    const crewmatePts = scoringMode === "extended" ? 3 : 1;
+    const impostorIds = new Set(impostors.map((p) => p.id));
+    crewmates
+      .filter((p) => votes.some((v) => v.voterId === p.id && impostorIds.has(v.accusedId)))
+      .forEach((p) => addPoints(p.id, crewmatePts));
     setWinnerSelection("Crewmates");
   };
 
   const handleAwardImpostors = () => {
     if (winnerSelection) return;
-    impostors.forEach((p) => addPoints(p.id, POINTS_PER_WIN));
+    const impostorPts = scoringMode === "extended" ? 4 : 1;
+    impostors.forEach((p) => addPoints(p.id, impostorPts));
     setWinnerSelection("Impostors");
   };
 
   const handleAwardSpecificImpostor = (id: string, name: string) => {
     if (winnerSelection) return;
-    addPoints(id, POINTS_PER_WIN);
+    const impostorPts = scoringMode === "extended" ? 4 : 1;
+    addPoints(id, impostorPts);
     setWinnerSelection(name);
   };
 

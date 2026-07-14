@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  useWindowDimensions,
 } from "react-native";
 import { Redirect, useRouter } from "expo-router";
 import { Button } from "../src/components/Button";
@@ -46,6 +47,8 @@ type Step =
 
 export default function LandingScreen() {
   const router = useRouter();
+  const { height } = useWindowDimensions();
+  const isSmallScreen = height < 750;
   const mode = useSessionStore((s) => s.mode);
   const setSession = useSessionStore((s) => s.setSession);
   const addPlayer = usePlayerStore((s) => s.addPlayer);
@@ -252,9 +255,12 @@ export default function LandingScreen() {
   if (step === "choose") {
     return (
       <SafeAreaView style={styles.safe}>
-        <View style={styles.chooseContainer}>
-          <View style={styles.hero}>
-            <PartyIcon size={64} />
+        <ScrollView
+          contentContainerStyle={styles.chooseContainer}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={[styles.hero, isSmallScreen && styles.heroSmall]}>
+            <PartyIcon size={isSmallScreen ? 44 : 64} />
             <AppLogo size="large" />
             <Text style={styles.tagline}>Pick your setup to get started</Text>
           </View>
@@ -317,7 +323,7 @@ export default function LandingScreen() {
               <ArrowRightIcon size={28} style={{ color: palette.impostor }} />
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -383,8 +389,8 @@ export default function LandingScreen() {
 
   // ── CREATE — waiting room ──────────────────────────────────
   if (step === "create-waiting") {
-    const livePlayers = liveSession ? Object.values(liveSession.players) : [];
-    const playerCount = livePlayers.length;
+    const livePlayerEntries = liveSession ? Object.entries(liveSession.players) : [];
+    const playerCount = livePlayerEntries.length;
 
     return (
       <SafeAreaView style={styles.safe}>
@@ -409,10 +415,10 @@ export default function LandingScreen() {
               <Text style={styles.waitingText}>Waiting for players to join…</Text>
             ) : (
               <View style={styles.playerList}>
-                {livePlayers.map((p, i) => (
-                  <View key={i} style={styles.playerRow}>
+                {livePlayerEntries.map(([uid, p]) => (
+                  <View key={uid} style={styles.playerRow}>
                     <Text style={styles.playerName}>{p.name}</Text>
-                    {i === 0 && <Text style={styles.badge}>host</Text>}
+                    {uid === liveSession!.hostId && <Text style={styles.badge}>host</Text>}
                   </View>
                 ))}
               </View>
@@ -535,8 +541,6 @@ export default function LandingScreen() {
 
   // ── JOIN — waiting for host ────────────────────────────────
   if (step === "join-waiting") {
-    const livePlayers = liveSession ? Object.values(liveSession.players) : [];
-
     return (
       <SafeAreaView style={styles.safe}>
         <ScrollView
@@ -553,15 +557,16 @@ export default function LandingScreen() {
             <Text style={styles.codeBannerValue}>{joinSessionCode}</Text>
           </View>
 
-          <FormSection label={`Players (${livePlayers.length})`}>
+          <FormSection label={`Players (${liveSession ? Object.keys(liveSession.players).length : 0})`}>
             {!liveSession ? (
               <ActivityIndicator color={palette.muted} />
             ) : (
               <View style={styles.playerList}>
-                {livePlayers.map((p, i) => {
+                {Object.entries(liveSession.players).map(([uid, p]) => {
                   const isYou = p.name.toLowerCase() === joinName.trim().toLowerCase();
+                  const isHostPlayer = uid === liveSession.hostId;
                   return (
-                    <View key={i} style={styles.playerRow}>
+                    <View key={uid} style={styles.playerRow}>
                       <Text
                         style={[
                           styles.playerName,
@@ -570,7 +575,7 @@ export default function LandingScreen() {
                       >
                         {p.name}
                       </Text>
-                      {i === 0 && !isYou && <Text style={styles.badge}>host</Text>}
+                      {isHostPlayer && !isYou && <Text style={styles.badge}>host</Text>}
                       {isYou && <Text style={[styles.badge, { color: palette.success, borderColor: palette.success }]}>you</Text>}
                     </View>
                   );
@@ -763,12 +768,13 @@ const styles = StyleSheet.create({
 
   // Choose screen
   chooseContainer: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxxl,
+    paddingVertical: spacing.xl,
     justifyContent: "center",
   },
   hero: { alignItems: "center", marginBottom: spacing.xxl },
+  heroSmall: { marginBottom: spacing.lg },
   logo: { fontSize: 64, marginBottom: spacing.md },
   appName: { ...typography.display, fontFamily: "HennyPenny_400Regular", color: palette.white, marginBottom: spacing.sm },
   tagline: { ...typography.body, color: palette.muted },

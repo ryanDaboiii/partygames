@@ -32,7 +32,6 @@ export interface WavelengthSetup {
   players: Player[];
   maxNumber: number;
   totalRounds: number;
-  categoryStyle: "specific" | "simple";
 }
 
 export type GamePhase = "setup" | "playing" | "game-over";

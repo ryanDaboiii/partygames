@@ -56,6 +56,13 @@ export default function ScoreboardScreen() {
   const isTie = sorted.length >= 2 && sorted[0].score === sorted[1].score;
   const winner = sorted.length > 0 && !isTie ? sorted[0] : null;
 
+  const sortedRanks: number[] = [];
+  sorted.forEach((p, i) => {
+    if (i === 0) sortedRanks.push(1);
+    else if (p.score === sorted[i - 1].score) sortedRanks.push(sortedRanks[i - 1]);
+    else sortedRanks.push(i + 1);
+  });
+
   const handlePlayAgain = () => {
     const samePlayers = players.map((p) => ({ ...p }));
     reset();
@@ -101,21 +108,21 @@ export default function ScoreboardScreen() {
           {sorted.map((p, i) => (
             <View
               key={p.id}
-              style={[styles.scoreRow, i === 0 && !isTie && { borderColor: ACCENT }]}
+              style={[styles.scoreRow, sortedRanks[i] === 1 && { borderColor: ACCENT }]}
             >
               <View style={{ width: 34, alignItems: "center", justifyContent: "center" }}>
-                {i === 0 && !isTie ? (
+                {sortedRanks[i] === 1 ? (
                   <MedalIcon rank={1} size={28} />
-                ) : i === 1 ? (
+                ) : sortedRanks[i] === 2 ? (
                   <MedalIcon rank={2} size={28} />
-                ) : i === 2 ? (
+                ) : sortedRanks[i] === 3 ? (
                   <MedalIcon rank={3} size={28} />
                 ) : (
-                  <Text style={styles.rank}>{i + 1}.</Text>
+                  <Text style={styles.rank}>{sortedRanks[i]}.</Text>
                 )}
               </View>
               <Text style={styles.scoreName}>{p.name}</Text>
-              <Text style={[styles.scorePoints, i === 0 && !isTie && { color: ACCENT }]}>
+              <Text style={[styles.scorePoints, sortedRanks[i] === 1 && { color: ACCENT }]}>
                 {p.score} pts
               </Text>
             </View>

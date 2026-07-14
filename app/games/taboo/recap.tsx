@@ -39,6 +39,7 @@ export default function RecapScreen() {
   const mode = useSessionStore((s) => s.mode);
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const isHost = useSessionStore((s) => s.isHost);
+  const scoringMode = useSessionStore((s) => s.scoringMode);
   const [showExitDialog, setShowExitDialog] = useState(false);
 
   useEffect(() => {
@@ -47,20 +48,15 @@ export default function RecapScreen() {
     if (phase === "setup") router.replace("/games/taboo");
   }, [phase]);
 
-  const handleExitKeep = async () => {
-    if (mode === "online" && isHost && sessionCode) {
-      try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
-    }
-    reset();
-    router.replace('/hub');
-  };
   const handleExitVoid = async () => {
-    Object.entries(gamePoints).forEach(([name, pts]) => {
-      if (pts > 0) {
-        const match = localPlayers.find((p) => p.name.toLowerCase() === name.toLowerCase());
-        if (match) addPoints(match.id, -pts);
-      }
-    });
+    if (scoringMode === "extended") {
+      Object.entries(gamePoints).forEach(([name, pts]) => {
+        if (pts > 0) {
+          const match = localPlayers.find((p) => p.name.toLowerCase() === name.toLowerCase());
+          if (match) addPoints(match.id, -pts);
+        }
+      });
+    }
     if (mode === "online" && isHost && sessionCode) {
       try { await clearSessionCurrentGame(sessionCode); } catch (_) {}
     }
@@ -87,8 +83,7 @@ export default function RecapScreen() {
     <SafeAreaView style={[styles.safe, { backgroundColor: GAME_THEME.accentDark }]}>
       <ExitGameDialog
         visible={showExitDialog}
-        onKeepScores={handleExitKeep}
-        onVoidPoints={handleExitVoid}
+        onVoidScores={handleExitVoid}
         onCancel={() => setShowExitDialog(false)}
       />
 

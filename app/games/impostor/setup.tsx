@@ -139,7 +139,7 @@ export default function SetupScreen() {
       startGame({ mode: "pass-and-play", players, impostorCount, category });
       showThen(
         { icon: "🕵️", IconComponent: ImpostorIcon, title: "Impostor", accentColor: ACCENT },
-        () => router.push("/games/impostor/reveal")
+        () => router.replace("/games/impostor/reveal")
       );
     }
   };
