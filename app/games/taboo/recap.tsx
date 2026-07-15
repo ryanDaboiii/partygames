@@ -4,8 +4,8 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { GameButton } from "../../../src/components/GameButton";
 import { BackButton } from "../../../src/components/BackButton";

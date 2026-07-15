@@ -4,9 +4,9 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   Pressable,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { palette, spacing, typography } from "../src/theme";
 import { gameThemes } from "../src/theme/gameThemes";

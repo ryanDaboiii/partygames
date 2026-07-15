@@ -1,6 +1,6 @@
-import { Audio } from "expo-av";
+import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 
-Audio.setAudioModeAsync({ playsInSilentModeIOS: true, staysActiveInBackground: true }).catch(() => {});
+setAudioModeAsync({ playsInSilentMode: true, shouldPlayInBackground: true }).catch(() => {});
 
 const sfx = {
   correct: require("../../assets/sounds/correct.wav"),
@@ -18,15 +18,16 @@ export function setSfxMuted(muted: boolean) {
 
 export function playSfx(id: SfxId) {
   if (isMuted) return;
-  Audio.Sound.createAsync(sfx[id], { shouldPlay: true })
-    .then(({ sound }) => {
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync().catch(() => {});
-        }
-      });
-    })
-    .catch((e) => {
-      if (__DEV__) console.warn("SFX playback error:", e);
+  try {
+    const player = createAudioPlayer(sfx[id]);
+    player.play();
+    const sub = player.addListener("playbackStatusUpdate", (status) => {
+      if (status.didJustFinish) {
+        sub.remove();
+        player.remove();
+      }
     });
+  } catch (e) {
+    if (__DEV__) console.warn("SFX playback error:", e);
+  }
 }

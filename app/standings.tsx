@@ -4,11 +4,12 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   Pressable,
   Alert,
   Dimensions,
+  ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { Button } from "../src/components/Button";
 import { palette, spacing, typography, shadows } from "../src/theme";
@@ -35,10 +36,14 @@ export default function StandingsScreen() {
   const clearSession = useSessionStore((s) => s.clearSession);
 
   const [liveSession, setLiveSession] = useState<SessionData | null>(null);
+  const [isLoading, setIsLoading] = useState(mode === "online");
 
   useEffect(() => {
     if (mode !== "online" || !sessionCode) return;
-    return subscribeToSession(sessionCode, setLiveSession);
+    return subscribeToSession(sessionCode, (data) => {
+      setLiveSession(data);
+      setIsLoading(false);
+    });
   }, [mode, sessionCode]);
 
   const sorted = mode === "online" && liveSession
@@ -87,6 +92,14 @@ export default function StandingsScreen() {
       ]
     );
   };
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: palette.bg }}>
+        <ActivityIndicator size="large" color="#FF2D78" />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe}>

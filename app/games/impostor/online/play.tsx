@@ -4,10 +4,10 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   Alert,
   Pressable,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { HoldToReveal } from "../../../../src/components/HoldToReveal";
 import { Button } from "../../../../src/components/Button";
@@ -34,6 +34,7 @@ import { KickPlayerModal } from "../../../../src/components/KickPlayerModal";
 import { BackButton } from "../../../../src/components/BackButton";
 import { ExitGameDialog } from "../../../../src/components/ExitGameDialog";
 import { useSessionStore } from "../../../../src/store/session";
+import { usePlayerStore } from "../../../../src/store/players";
 import type { PlayerRole } from "../../../../src/games/impostor/types";
 import { ImpostorIcon } from "../../../../src/assets/icons/ImpostorIcon";
 import { CrewmateIcon } from "../../../../src/assets/icons/CrewmateIcon";
@@ -81,6 +82,8 @@ export default function OnlinePlayScreen() {
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const isHost = useSessionStore((s) => s.isHost);
   const scoringMode = useSessionStore((s) => s.scoringMode);
+  const localPlayers = usePlayerStore((s) => s.players);
+  const addPoints = usePlayerStore((s) => s.addPoints);
 
   const [session, setSession] = useState<SessionData | null>(null);
   const [myRole, setMyRole] = useState<MyRole | null>(null);
@@ -185,8 +188,13 @@ export default function OnlinePlayScreen() {
 
     setMyPtsEarned(pts);
 
-    if (pts > 0 && sessionCode) {
-      addPointsOnline(sessionCode, myUid, pts).catch(() => {});
+    if (pts > 0) {
+      const myName = session?.players[myUid]?.name;
+      if (myName) {
+        const local = localPlayers.find((p) => p.name.toLowerCase() === myName.toLowerCase());
+        if (local) addPoints(local.id, pts);
+      }
+      if (sessionCode) addPointsOnline(sessionCode, myUid, pts).catch(() => {});
     }
   }, [game?.status, myUid]);
 

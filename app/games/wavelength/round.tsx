@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   Pressable,
   Animated,
   ScrollView,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { GameButton } from "../../../src/components/GameButton";
 import { palette, spacing, typography, scaleFont, shadows } from "../../../src/theme";

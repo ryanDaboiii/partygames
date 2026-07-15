@@ -3,12 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Pressable,
   Alert,
   Dimensions,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { GameButton } from "../../../src/components/GameButton";
 import { palette, spacing, typography, scaleFont, shadows } from "../../../src/theme";
@@ -29,6 +29,7 @@ import {
   advanceWavelengthClueTurn,
   advanceToWavelengthGuess,
   requestWavelengthExtraClue,
+  requestWavelengthExtraClueWithCategory,
   submitWavelengthGuess,
   startWavelengthRound,
   markWavelengthRevealed,
@@ -37,6 +38,7 @@ import {
   type WavelengthFSAssignment,
 } from "../../../src/firebase/wavelength";
 import { addPointsOnline } from "../../../src/firebase/sessions";
+import { usePlayerStore } from "../../../src/store/players";
 import { HoldToReveal } from "../../../src/components/HoldToReveal";
 import { LeaveGameDialog } from "../../../src/components/LeaveGameDialog";
 import { CATEGORIES, pickCategories } from "../../../src/games/wavelength/categories";
@@ -63,6 +65,8 @@ export default function WavelengthOnlineScreen() {
 
   const myPlayerName = useSessionStore((s) => s.myPlayerName);
   const scoringMode = useSessionStore((s) => s.scoringMode);
+  const localPlayers = usePlayerStore((s) => s.players);
+  const addPoints = usePlayerStore((s) => s.addPoints);
 
   const [state, setState] = useState<WavelengthFSState | null>(null);
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
@@ -72,6 +76,7 @@ export default function WavelengthOnlineScreen() {
   const [isPeeking, setIsPeeking] = useState(false);
   const [guessValue, setGuessValue] = useState<number | null>(null);
   const [skipOffset, setSkipOffset] = useState(0);
+  const [extraClueUsed, setExtraClueUsed] = useState(false);
 
   const scoredRoundRef = useRef(-1);
   const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -118,6 +123,7 @@ export default function WavelengthOnlineScreen() {
     setMyRevealed(false);
     setIsPeeking(false);
     setSkipOffset(0);
+    setExtraClueUsed(false);
   }, [state?.round]);
 
   useEffect(() => {
@@ -138,8 +144,13 @@ export default function WavelengthOnlineScreen() {
         ? scoringMode === "extended" ? 3 : 1
         : scoringMode === "extended" ? 1 : 0
       : 0;
-    if (pts > 0 && sessionCode) {
-      addPointsOnline(sessionCode, myUid, pts).catch(() => {});
+    if (pts > 0) {
+      const myName = state.playerNames[myUid];
+      if (myName) {
+        const local = localPlayers.find((p) => p.name.toLowerCase() === myName.toLowerCase());
+        if (local) addPoints(local.id, pts);
+      }
+      if (sessionCode) addPointsOnline(sessionCode, myUid, pts).catch(() => {});
     }
   }, [state?.phase, state?.round, myUid]);
 
@@ -285,10 +296,23 @@ export default function WavelengthOnlineScreen() {
     if (!sessionCode) return;
     const nonGuessers = state.playerOrder.filter((uid) => uid !== state.guesserId);
     if (nonGuessers.length === 0) return;
-    const selectedUid = nonGuessers[Math.floor(Math.random() * nonGuessers.length)];
+
+    // Prefer players who haven't given a clue this round
+    const eligible = nonGuessers.filter((uid) => !state.turnOrder.includes(uid));
+    const pool = eligible.length > 0 ? eligible : nonGuessers;
+    const selectedUid = pool[Math.floor(Math.random() * pool.length)];
+
+    // Pick a category not already assigned this round
+    const usedCategoryNames = Object.values(state.assignments).map((a) => a.categoryName);
+    const available = CATEGORIES.filter((c) => !usedCategoryNames.includes(c.name));
+    const freshCategory =
+      available[Math.floor(Math.random() * available.length)] ??
+      CATEGORIES[Math.floor(Math.random() * CATEGORIES.length)];
+
     setBusy(true);
     try {
-      await requestWavelengthExtraClue(sessionCode, selectedUid);
+      await requestWavelengthExtraClueWithCategory(sessionCode, selectedUid, freshCategory.name);
+      setExtraClueUsed(true);
     } catch (e: any) {
       Alert.alert("Error", e.message ?? "Could not request extra clue");
     } finally {
@@ -602,11 +626,13 @@ export default function WavelengthOnlineScreen() {
               disabled={busy}
             />
             <Pressable
-              style={[styles.extraClueBtn, { opacity: busy ? 0.5 : 1 }]}
+              style={[styles.extraClueBtn, { opacity: (busy || extraClueUsed) ? 0.5 : 1 }]}
               onPress={handleOnlineExtraClue}
-              disabled={busy}
+              disabled={busy || extraClueUsed}
             >
-              <Text style={styles.extraClueBtnText}>Need one more clue?</Text>
+              <Text style={styles.extraClueBtnText}>
+                {extraClueUsed ? "Extra clue requested" : "Need one more clue?"}
+              </Text>
             </Pressable>
           </View>
           {backBtn}

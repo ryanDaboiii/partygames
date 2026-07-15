@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { Audio } from "expo-av";
+import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
+import type { AudioPlayer } from "expo-audio";
 
 const VOLUME = 0.5;
 
@@ -12,16 +13,15 @@ const tracks = {
 
 export type GameMusicId = keyof typeof tracks;
 
-let currentSound: Audio.Sound | null = null;
+let currentPlayer: AudioPlayer | null = null;
 let _muted = false;
 let isChanging = false;
 
 export function stopMusic() {
-  if (currentSound) {
-    const s = currentSound;
-    currentSound = null;
-    s.stopAsync().catch(() => {});
-    s.unloadAsync().catch(() => {});
+  if (currentPlayer) {
+    const p = currentPlayer;
+    currentPlayer = null;
+    try { p.remove(); } catch {}
   }
 }
 
@@ -29,13 +29,12 @@ export async function playMusic(gameId: GameMusicId) {
   if (isChanging) return;
   isChanging = true;
   try {
-    await stopMusic();
-    const { sound } = await Audio.Sound.createAsync(tracks[gameId], {
-      isLooping: true,
-      volume: _muted ? 0 : VOLUME,
-      shouldPlay: true,
-    });
-    currentSound = sound;
+    stopMusic();
+    const player = createAudioPlayer(tracks[gameId]);
+    player.loop = true;
+    player.volume = _muted ? 0 : VOLUME;
+    player.play();
+    currentPlayer = player;
   } catch (e) {
     if (__DEV__) console.warn("Music load failed:", e);
   } finally {
@@ -45,7 +44,7 @@ export async function playMusic(gameId: GameMusicId) {
 
 export function setMusicMuted(muted: boolean) {
   _muted = muted;
-  if (currentSound) currentSound.setVolumeAsync(muted ? 0 : VOLUME).catch(() => {});
+  if (currentPlayer) currentPlayer.volume = muted ? 0 : VOLUME;
 }
 
 /** Call at the top level of a game layout. Starts music on mount, stops on unmount. */
@@ -56,9 +55,9 @@ export function useGameMusic(gameId: GameMusicId | null) {
       return;
     }
 
-    Audio.setAudioModeAsync({
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
+    setAudioModeAsync({
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
     }).catch(() => {});
 
     playMusic(gameId);

@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   Pressable,
   TextInput,
   Alert,
@@ -13,6 +12,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useRouter } from "expo-router";
 import { Button } from "../src/components/Button";
 import { palette, spacing, typography } from "../src/theme";

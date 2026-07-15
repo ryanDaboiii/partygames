@@ -3,9 +3,9 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   Pressable,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { palette, spacing, typography, scaleFont, shadows } from "../../../src/theme";
 import { useTabooStore, getCurrentCluegiver } from "../../../src/games/taboo/store";

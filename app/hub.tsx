@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   Pressable,
   Modal,
   TextInput,
@@ -13,6 +12,7 @@ import {
   Platform,
   Share,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Redirect, useRouter } from "expo-router";
 import { GAMES } from "../src/games/registry";
 import { GameCard } from "../src/components/GameCard";

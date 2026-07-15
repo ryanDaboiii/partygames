@@ -4,7 +4,7 @@ import { useGameMusic } from "../src/hooks/useGameMusic";
 import { StatusBar } from "expo-status-bar";
 import { Alert, Platform, StyleSheet, Text, View } from "react-native";
 import { MuteButton } from "../src/components/MuteButton";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFonts } from "expo-font";
 import { HennyPenny_400Regular } from "@expo-google-fonts/henny-penny";
 import { Quicksand_700Bold } from "@expo-google-fonts/quicksand";
@@ -13,6 +13,7 @@ import { fonts } from "../src/theme/fonts";
 import { useSessionStore } from "../src/store/session";
 import { usePlayerStore } from "../src/store/players";
 import { subscribeToSession } from "../src/firebase/sessions";
+import { ensureAnonymousAuth } from "../src/firebase/rooms";
 import type { GameMusicId } from "../src/hooks/useGameMusic";
 
 function getMusicForPath(path: string): GameMusicId | null {
@@ -47,10 +48,17 @@ function SessionEndWatcher() {
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const clearSession = useSessionStore((s) => s.clearSession);
   const resetAll = usePlayerStore((s) => s.resetAll);
+  const [authReady, setAuthReady] = useState(false);
   const handledRef = useRef(false);
   const inGameRef = useRef(false);
   const isFirstCallbackRef = useRef(true);
   const lastNavigatedGameRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    ensureAnonymousAuth()
+      .then(() => setAuthReady(true))
+      .catch(() => setAuthReady(true));
+  }, []);
 
   const navigateToGame = (gameId: string) => {
     switch (gameId) {
@@ -62,7 +70,7 @@ function SessionEndWatcher() {
   };
 
   useEffect(() => {
-    if (mode !== "online" || isHost || !sessionCode) return;
+    if (!authReady || mode !== "online" || isHost || !sessionCode) return;
     handledRef.current = false;
     inGameRef.current = false;
     isFirstCallbackRef.current = true;
@@ -119,7 +127,7 @@ function SessionEndWatcher() {
         navigateToGame(game);
       }
     });
-  }, [mode, isHost, sessionCode]);
+  }, [authReady, mode, isHost, sessionCode]);
 
   return null;
 }

@@ -6,10 +6,10 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   Pressable,
   Dimensions,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { GameButton } from "../../../src/components/GameButton";
 import { Timer } from "../../../src/components/Timer";

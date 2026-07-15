@@ -52,6 +52,19 @@ export async function requestWavelengthExtraClue(
   });
 }
 
+export async function requestWavelengthExtraClueWithCategory(
+  sessionCode: string,
+  selectedUid: string,
+  categoryName: string,
+): Promise<void> {
+  await updateDoc(stateRef(sessionCode), {
+    phase: "clue",
+    turnOrder: [selectedUid],
+    currentTurnIndex: 0,
+    [`assignments.${selectedUid}`]: { categoryName },
+  });
+}
+
 export async function markWavelengthRevealed(
   sessionCode: string,
   uid: string,

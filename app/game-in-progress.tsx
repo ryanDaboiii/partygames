@@ -4,8 +4,8 @@ import {
   Text,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
 } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from "expo-router";
 import { palette, spacing, typography } from "../src/theme";
 import { useSessionStore } from "../src/store/session";
